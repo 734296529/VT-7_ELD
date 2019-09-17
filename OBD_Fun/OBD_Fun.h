@@ -32,24 +32,8 @@ int getRpm(void);
 int getEngineHours(void);
 int getMiles(void);
 int setsetBaudRate(int deep);
+int setBroadcastMode(bool mode1);
 
 int protHandler(u8* recvCmd,u8 len);
 u8 writeCmd(char* cmd);
-u8 readCmd(u8* Data,u8* data_len,u32 timeout);
-int mcuReply(u16 cmdCode,u8 replyFlag);		//单片机校验应答
-int setSleepDelay(u8 slpDly);		//设置熄火休眠延时
-int backup_Handler(u8 i);
-int backup_2Flash(void);
-int setSyncRange(u16 mStart,u16 mEnd);
-void sync_Handler(void);
-void sync_SendData(u8 mBuf[][32]);
-//部分数据解析方法
-//void ReadStrUnit(char *str, char *temp_str, int idx, int len);
-//int GetSubStrPos(char *str1, char *str2);//获取字符串中子串的位置
-//char getChar(char *str, int pos);  		//获取字符串中指定位置的字符
-
-
-
-
-#endif
-
+u8 readCmd(u8* Data,u8* d

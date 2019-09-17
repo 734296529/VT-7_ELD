@@ -48,6 +48,7 @@ int DFL168_Init(void)
 
 void OBD_funStart(void)
 {	
+  SyncFlag = 0;
 	HAL_UART_Receive_DMA(&huart3,(uint8_t*)ReceiveBuff,UARTSIZE);
 	TIMERS2_Start(1);
 }
@@ -67,7 +68,7 @@ void J1939_getData(void)
 {
 	TimeStamp = RTC_ReadTimeCounter(&hrtc);
 	static u8 i = 0;
-		
+
 	getEngineHours();		
 	OBD_transData(EngineHours_P);	
 	HAL_Delay(20);	
@@ -85,16 +86,18 @@ void J1939_getData(void)
 	HAL_Delay(20);
 	
 	OBD_transData(TotalMiles_P);
-	HAL_Delay(20);
+	HAL_Delay(10);
 
 	if(!Vin_ed)
 		getVin();	
 	OBD_transData(Vin_P);	
+	HAL_Delay(20);
 	
 	backup_Handler(i++);
 	if(i>=4){
 		i = 0;
 	}
+
 }
 
 
@@ -237,16 +240,18 @@ int getVin(void)
 	
 	memset(&Vin_T,0,sizeof(OBD_T));	
 	
-	//发送指令
+	//设置模式
+	setBroadcastMode(0);
 	writeCmd("at st fa\r");
 	Delay_ms(20);
+	//发送指令
 	writeCmd("feec\r");
 	
 	//循环超时等待接收
 	while(work++ < request_cycle)
 	{
 		//收到数据
-		if(readCmd((u8*)cat,&data_len,300))
+		if(readCmd((u8*)cat,&data_len,1020))
 		{
 			if(data_len<9)
 				continue;
@@ -364,6 +369,8 @@ int getVss(void)
 	
 	memset(&Vss_T,0,sizeof(OBD_T));	
 	
+	//设置模式
+	setBroadcastMode(1);
 	//发送指令
 	writeCmd("FEF1\r");
 	
@@ -371,7 +378,7 @@ int getVss(void)
 	while(work++ < request_cycle)
 	{
 		//收到数据
-		if(readCmd((u8*)cat,&data_len,300))
+		if(readCmd((u8*)cat,&data_len,200))
 		{
 			if(data_len<9)
 				continue;
@@ -432,9 +439,11 @@ int getRpm(void)
 	
 	memset(&Rpm_T,0,sizeof(OBD_T));	
 	
-	//发送指令
+	//设置模式
+	setBroadcastMode(1);
 	writeCmd("at st 4b\r");
 	Delay_ms(20);
+	//发送指令
 	writeCmd("F004\r");
 	
 	//循环超时等待接收
@@ -481,7 +490,6 @@ int getRpm(void)
 	Rpm_T.type = 0X04;
 	
 	OBD_TtoP(Rpm_T,Rpm_P);
-		
 	if(sub > 0){//转速不为0
 		isStartUp = 1;		//修改发动机状态为点火
 		Sleep_Stop();			//停止休眠计时
@@ -506,6 +514,8 @@ int getEngineHours(void)
 	
 	memset(&EngineHours_T,0,sizeof(OBD_T));
 	
+	//设置模式
+	setBroadcastMode(0);
 	//发送指令
 	writeCmd("FEE5\r");
 	
@@ -513,7 +523,7 @@ int getEngineHours(void)
 	while(work++ < request_cycle)
 	{
 		//收到数据
-		if(readCmd((u8*)cat,&data_len,300))
+		if(readCmd((u8*)cat,&data_len,200))
 		{
 			if(data_len<9)
 				continue;
@@ -568,6 +578,11 @@ int getMiles(void)
 	
 	memset(&Miles_T,0,sizeof(OBD_T));	
 	memset(&TotalMiles_T,0,sizeof(OBD_T));
+	
+	//设置模式
+	setBroadcastMode(1);
+	writeCmd("at st 4b\r");
+	Delay_ms(20);	
 	//发送指令
 	//writeCmd("FEC1\r");//高精度
 	writeCmd("FEE0\r");
@@ -576,7 +591,7 @@ int getMiles(void)
 	while(work++ < request_cycle)
 	{
 		//收到数据
-		if(readCmd((u8*)cat,&data_len,300))
+		if(readCmd((u8*)cat,&data_len,310))
 		{
 			if(data_len<9)
 				continue;
@@ -587,21 +602,8 @@ int getMiles(void)
 		else 
 			break;		
 	}
-/*
-	for(u8 work = 0,ret = 0; work < request_cycle; work++)
-	{
-		ret = readCmd((u8*)cat,&data_len,300);	
-		if(ret == 2)		//收到"ERROR"或者"NODATA"
-			return 0;
-		else if(ret==0)	//没有收到数据
-			continue;
-		else						//收到数据
-		{
-			if(data_len<9)
-				continue;
-		}		
-	}
-*/	
+	writeCmd("at st 32\r");
+
 	u32 sub0 = 0,sub1 = 0;
 	
 	if(getSpaceNum(cat)>=7)//计算空格数量
@@ -620,7 +622,7 @@ int getMiles(void)
 		sub0 = (e +f*256 + g*65536 + h*16777216)/8;//总里程
 	}
 
-	if(sub1 && sub0<526385152)
+	if(sub1 && sub1<526385152)
 	{
 		Miles_T.Data[0] = (sub1 >> 24);
 		Miles_T.Data[1] = (sub1 >> 16);
@@ -780,9 +782,38 @@ end:
     }
 #endif    
 		return 0;
-
 }	
 
+int setBroadcastMode(bool mode1)
+{
+	u8 work = 0, data_len = 0;
+	char cat[48] = "";
+	char cmd[20] = "";
+
+	if(mode1)
+		sprintf(cmd, "at intrude 0\r");
+	else
+		sprintf(cmd, "at intrude 1\r");
+
+	writeCmd(cmd);
+	while(work++ < request_cycle)
+	{
+		//收到了数据
+		if(readCmd((u8*)cat,&data_len,200))
+		{
+			if(data_len<9)
+				return 0;
+			else if(strstr(cat,"OK"))		
+				return 1;
+		}
+		//没有收到数据
+		else 
+			continue;		
+	}
+	return 0;
+
+
+}
 
 /* 接受上层命令，协议解析 */
 int protHandler(u8* recvCmd,u8 len)
@@ -901,11 +932,11 @@ u8 writeCmd(char *cmd)
 	/*  清除中断标志 */
 	__HAL_UART_CLEAR_IDLEFLAG(&huart2);
 	/* 停止DMA接收 */
-	//HAL_UART_DMAStop(&huart2);
+	HAL_UART_DMAStop(&huart2);
 	/*	清空接收缓存区	*/
-	//memset(ReceiveBuff2,0,sizeof(ReceiveBuff2));	
+	memset(ReceiveBuff2,0,sizeof(ReceiveBuff2));	
 	/*	接收数据长度清零	*/
-	//Rx_len2=0;
+	Rx_len2=0;
 	recv_end_flag2=0;
 	/*	开启下一次接收	*/
 	HAL_UART_Receive_DMA(&huart2,(u8*)ReceiveBuff2,UARTSIZE);
