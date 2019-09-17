@@ -47,10 +47,11 @@ int DFL168_Init(void)
 }
 
 void OBD_funStart(void)
-{	
+{
   SyncFlag = 0;
 	HAL_UART_Receive_DMA(&huart3,(uint8_t*)ReceiveBuff,UARTSIZE);
-	TIMERS2_Start(1);
+	//TIMERS2_Start(1);
+	obd_Rdy=1;
 }
 void OBD_funStop(void)
 {
@@ -66,38 +67,41 @@ void OBD_Run(void)
 
 void J1939_getData(void)
 {
-	TimeStamp = RTC_ReadTimeCounter(&hrtc);
+	u32 tmp = RTC_ReadTimeCounter(&hrtc);
 	static u8 i = 0;
+	if(tmp - TimeStamp > 0)
+	{
+		TimeStamp = tmp;
+		
+		getEngineHours();		
+		OBD_transData(EngineHours_P);	
+		HAL_Delay(20);	
+		
+		getVss();
+		OBD_transData(Vss_P);	
+		HAL_Delay(20);
+		
+		getRpm();
+		OBD_transData(Rpm_P);	
+		HAL_Delay(20);
+		
+		getMiles();
+		OBD_transData(Miles_P);
+		HAL_Delay(20);
+		
+		OBD_transData(TotalMiles_P);
+		HAL_Delay(10);
 
-	getEngineHours();		
-	OBD_transData(EngineHours_P);	
-	HAL_Delay(20);	
-	
-	getVss();
-	OBD_transData(Vss_P);	
-	HAL_Delay(20);
-	
-	getRpm();
-	OBD_transData(Rpm_P);	
-	HAL_Delay(20);
-	
-	getMiles();
-	OBD_transData(Miles_P);
-	HAL_Delay(20);
-	
-	OBD_transData(TotalMiles_P);
-	HAL_Delay(10);
-
-	if(!Vin_ed)
-		getVin();	
-	OBD_transData(Vin_P);	
-	HAL_Delay(20);
-	
-	backup_Handler(i++);
-	if(i>=4){
-		i = 0;
+		if(!Vin_ed)
+			getVin();	
+		OBD_transData(Vin_P);	
+		HAL_Delay(20);
+		
+		backup_Handler(i++);
+		if(i>=4){
+			i = 0;
+		}
 	}
-
 }
 
 
@@ -492,13 +496,13 @@ int getRpm(void)
 	OBD_TtoP(Rpm_T,Rpm_P);
 	if(sub > 0){//转速不为0
 		isStartUp = 1;		//修改发动机状态为点火
-		Sleep_Stop();			//停止休眠计时
 	}
 	else if(sub <= 0 && !SyncFlag){//转速为0,非同步状态,且发动机状态为点火
 		if(isStartUp == 1){
-			Sleep_Start();
+			sleepCounter = RTC_ReadTimeCounter(&hrtc);
 		}
 		isStartUp = 0;		//修改发动机状态为熄火
+		Sleep_Manage();
 	}
 	
 	return sub;
@@ -1006,7 +1010,7 @@ int setSleepDelay(u8 slpDly)
 	tmpbuf[2] = sleepDelay >> 8;
 	tmpbuf[3] = sleepDelay;
 	W25QXX_Write(tmpbuf,FLASH_ADDR(8191,1),4);	//储存休眠时间设置
-	sleepCount = 0;
+	sleepCounter = RTC_ReadTimeCounter(&hrtc);
 	return 1;
 }
 

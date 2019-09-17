@@ -16,7 +16,7 @@ volatile u8 recv_end_flag2 = 0, Rx_len2 = 0;
 
 volatile bool isStopMode = 0;			//睡眠模式标志位
 volatile u32 sleepDelay = 300;		//熄火延时休眠时间(s)
-volatile u32 sleepCount = 0;			//当前熄火时间(s)
+volatile u32 sleepCounter = 0;		//当前熄火时间(s)
 volatile u8 backupSwitch = 0;			//当前存储开关
 volatile bool isStartUp = 1;			//发动机点火状态
 volatile u8 SyncFlag = 0;	 				//数据同步标志位

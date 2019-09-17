@@ -36,4 +36,13 @@ int setBroadcastMode(bool mode1);
 
 int protHandler(u8* recvCmd,u8 len);
 u8 writeCmd(char* cmd);
-u8 readCmd(u8* Data,u8* d
+u8 readCmd(u8* Data,u8* data_len,u32 timeout);
+int mcuReply(u16 cmdCode,u8 replyFlag);
+int setSleepDelay(u8 slpDly);
+int backup_Handler(u8 i);
+int backup_2Flash(void);
+int setSyncRange(u16 mStart,u16 mEnd);
+void sync_Handler(void);
+void sync_SendData(u8 mBuf[][32]);
+
+#endif

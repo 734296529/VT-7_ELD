@@ -15,8 +15,7 @@ extern "C" {
 	
 void Enter_StopMode(void);
 void Sleep_Manage(void);
-void Sleep_Start(void);
-void Sleep_Stop(void);
+
 
 	
 #ifdef	__cplusplus

@@ -21,6 +21,7 @@ void Enter_StopMode(void)
 */
 
 	isStopMode = ON;
+	obd_Rdy = 0;
 	//睡眠蓝牙、STN1110模块
   HAL_GPIO_WritePin(SLEEP_GPIO_Port, SLEEP_Pin, GPIO_PIN_RESET);
 
@@ -47,31 +48,22 @@ void Enter_StopMode(void)
 
 	isStartUp = 1;//修改发动机状态为点火	
 	DFL168_Init();
-	TIMERS2_Start(1);
+//	TIMERS2_Start(1);
 	TIMERS_Start(0);
+	obd_Rdy = 1;
 	printf(" Exit StopMode!\r\n");
 }
 
 void Sleep_Manage(void)
 {
-	sleepCount++;
-	if(sleepCount == sleepDelay)
+	printf("timercounter=%d, sleepCounter = %d\r\n",RTC_ReadTimeCounter(&hrtc),sleepCounter);
+	if(RTC_ReadTimeCounter(&hrtc) - sleepCounter >= sleepDelay)
 	{
-		Sleep_Stop();
 		Enter_StopMode();
 	}
 }
 
-void Sleep_Start(void)
-{
-	sleepCount = 0;
-	HAL_TIM_Base_Start_IT(&htim2);
-}
 
-void Sleep_Stop(void)
-{
-	HAL_TIM_Base_Stop_IT(&htim2);
-}
 
 
 

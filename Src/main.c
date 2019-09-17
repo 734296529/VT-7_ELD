@@ -125,10 +125,10 @@ int main(void)
   MX_RTC_Init();
   MX_SPI1_Init();
   MX_TIM3_Init();
-  MX_TIM4_Init();
+//  MX_TIM4_Init();
   MX_USART2_UART_Init();
   MX_USART1_UART_Init();
-  MX_TIM2_Init();
+//  MX_TIM2_Init();
   MX_USART3_UART_Init();
   MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
@@ -151,7 +151,7 @@ int main(void)
 	/* 开启定时器中断 */
 //	HAL_TIM_Base_Start_IT(&htim2);
 	HAL_TIM_Base_Start_IT(&htim3);
-	HAL_TIM_Base_Start_IT(&htim4);
+//	HAL_TIM_Base_Start_IT(&htim4);
 
 	/* w25qxx nor-flash初始化 */
 	W25QXX_Init();
@@ -163,7 +163,7 @@ int main(void)
 	TIMERS_Add(0,200,1,LED_Manage);//LED指示灯管理
 	TIMERS_Start(0);
 	
-	TIMERS2_Add(1,1,1,OBD_Run);//开始读取读取发送ECU数据
+//	TIMERS2_Add(1,1,1,OBD_Run);//开始读取读取发送ECU数据
 	Delay_ms(5000);//等待DFL168上电启动
 	DFL168_Init();//STN1110初始化
 	
@@ -178,6 +178,10 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
+		if(obd_Rdy)
+		{
+			J1939_getData();
+		}
 		if(SyncFlag==1)
 		{
 			sync_Handler();

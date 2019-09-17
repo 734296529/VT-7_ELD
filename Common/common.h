@@ -43,7 +43,7 @@ extern volatile u8 recv_end_flag2, Rx_len2;
 
 extern volatile bool isStopMode;		//睡眠模式标志位
 extern volatile u32 sleepDelay;			//熄火延时休眠时间(s)
-extern volatile u32 sleepCount;			//当前熄火时间(s)
+extern volatile u32 sleepCounter;		//当前熄火时间(s)
 extern volatile u8 backupSwitch;		//当前存储开关
 extern volatile bool isStartUp;			//发动机点火状态
 extern volatile u8 SyncFlag;				//数据同步标志位
