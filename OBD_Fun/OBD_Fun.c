@@ -663,12 +663,6 @@ int getMiles(void)
 /*ÉèÖÃ²¨ÌØÂÊ*/
 int setsetBaudRate(int deep)
 {
-#if 0
-    char *cmd1 = "at pp 32 sv 01\r";
-    char *cmd2 = "at pp 32 on\r";
-    char *cmd3 = "at ppp\r";
-    char *cmd4 = "at pp 32 off\r";
-    char *cmd5 = "atz\r";
     char cat[64];
     int work = 0;
     int ret = -1;
@@ -678,113 +672,26 @@ int setsetBaudRate(int deep)
     } else if (deep == 500){
         goto tab_500;
     } else{
-        return -11;
+        return 0;
     }
 
 tab_250:
-    Delay_ms(20);
     writeCmd("at pp 32 off\r");
-    while (GetSubStrPos(cat, "at pp 32 off") < 0) 
-		{
-        if (work++ == request_cycle) {
-            return -1;
-        }
-        memset(cat, 0, 64);
-        ret = read_timeout(fd, 1);
-        if (ret == 0) {
-            read(fd, cat, sizeof(cat));
-        }
-        if (ret == -1) {
-            pthread_mutex_unlock(&count_lock);
-            return -2;
-        }
-    }
+		Delay_ms(20);
     goto end;
 
 tab_500:
-    Delay_ms(20);
-    //First cmd1 = "at pp 32 sv 01\r"
     writeCmd("at pp 32 sv 01\r");
-    while (GetSubStrPos(cat, "at pp 32 sv 01") < 0) 
-		{
-        if (work++ == request_cycle) {
-            pthread_mutex_unlock(&count_lock);
-            return -3;
-        }
-        memset(cat, 0, 64);
-        ret = read_timeout(fd, 1);
-        if (ret == 0) {
-            read(fd, cat, sizeof(cat));
-        }
-        if (ret == -1) {
-            return -4;
-        }
-    }
-
-    work = 0;
-    ret = -1;
-    memset(cat, 0, 32);
-    //Second cmd2 = "at pp 32 on\r"
-    Delay_ms(20);
+		Delay_ms(20);
     writeCmd("at pp 32 on\r");
-    while (GetSubStrPos(cat, "at pp 32 on") < 0) 
-		{
-        if (work++ == request_cycle) {
-            return -5;
-        }
-        memset(cat, 0, 64);
-        ret = read_timeout(fd, 1);
-        if (ret == 0) {
-            read(fd, cat, sizeof(cat));
-        }
-        if (ret == -1) {
-            return -6;
-        }
-    }
+    Delay_ms(20);
 
 end:
-    work = 0;
-    ret = -1;
-    memset(cat, 0, 32);
-    //End first cmd3 = "at ppp\r", save
-    Delay_ms(20);
     writeCmd("at ppp\r");
-    while (GetSubStrPos(cat, "OK") X< 0) 
-		{
-        if (work++ == request_cycle) {
-            return -7;
-        }
-        memset(cat, 0, 64);
-        ret = read_timeout(fd, 1);
-        if (ret == 0) {
-            read(fd, cat, sizeof(cat));
-        }
-        if (ret == -1) {
-            return -8;
-        }
-    }
-
-    work = 0;
-    ret = -1;
-    memset(cat, 0, 32);
-    //End second cmd5 = "atz\r", reset
     Delay_ms(20);
     writeCmd("atz\r");
-    while (GetSubStrPos(cat, "DFL168A") < 0) 
-		{
-        if (work++ == request_cycle) {
-            return -9;
-        }
-        memset(cat, 0, 64);
-        ret = read_timeout(fd, 1);
-        if (ret == 0) {
-            read(fd, cat, sizeof(cat));
-        }
-        if (ret == -1) {
-            return -10;
-        }
-    }
-#endif    
+    Delay_ms(50);
+		
 		return 0;
 }	
 
