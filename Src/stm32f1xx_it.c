@@ -400,7 +400,7 @@ void USART2_IRQHandler(void)
 			recv_end_flag2 = 1;
 		}
 	}
-#if 1
+#if 0
 	if(obd_Rdy==0)
 	{
 		/*	清空接收缓存区	*/

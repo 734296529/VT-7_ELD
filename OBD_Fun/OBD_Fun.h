@@ -31,7 +31,9 @@ int getVss(void);
 int getRpm(void);
 int getEngineHours(void);
 int getMiles(void);
+int autoBaudRate(void);
 int setsetBaudRate(int deep);
+int baudTest(void);
 int setBroadcastMode(bool mode1);
 
 int protHandler(u8* recvCmd,u8 len);

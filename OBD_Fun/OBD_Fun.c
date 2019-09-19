@@ -29,19 +29,17 @@ u8 TotalMiles_P[64] = {0};
 
 int DFL168_Init(void)
 {
-	char command[20] ="";
-	strcpy(command,"AT SLEEP PIN 1\r");
-	HAL_UART_Transmit(&huart2, (u8*)command, strlen(command), 0xFFFF);	
-	HAL_Delay(20);
-	strcpy(command,"AT SLEEP P 0\r");
-	HAL_UART_Transmit(&huart2, (u8*)command, strlen(command), 0xFFFF);
-	HAL_Delay(20);
-	strcpy(command,"AT SP A\r");//选择1939协议
-	HAL_UART_Transmit(&huart2, (u8*)command, strlen(command), 0xFFFF);	
+	writeCmd("AT SP A\r");//选择1939协议
+	HAL_Delay(40);
+
+	printf("autoBaudRate=%d\r\n",autoBaudRate());
+	HAL_Delay(40);
+
+	writeCmd("AT SLEEP PIN 1\r");
+	HAL_Delay(40);
+	writeCmd("AT SLEEP P 0\r");
 	HAL_Delay(40);
 	
-	HAL_UART_Receive_DMA(&huart3,(uint8_t*)ReceiveBuff,UARTSIZE);
-	HAL_Delay(200);
 	OBD_funStart();
 	return 1;
 }
@@ -49,7 +47,6 @@ int DFL168_Init(void)
 void OBD_funStart(void)
 {
   SyncFlag = 0;
-	HAL_UART_Receive_DMA(&huart3,(uint8_t*)ReceiveBuff,UARTSIZE);
 	//TIMERS2_Start(1);
 	obd_Rdy=1;
 }
@@ -101,6 +98,7 @@ void J1939_getData(void)
 		if(i>=4){
 			i = 0;
 		}
+		HAL_IWDG_Refresh(&hiwdg);//复位看门狗
 	}
 }
 
@@ -247,13 +245,14 @@ int getVin(void)
 	//设置模式
 	setBroadcastMode(0);
 	writeCmd("at st fa\r");
-	Delay_ms(20);
+	HAL_Delay(20);
 	//发送指令
 	writeCmd("feec\r");
 	
 	//循环超时等待接收
 	while(work++ < request_cycle)
 	{
+		HAL_IWDG_Refresh(&hiwdg);//复位看门狗
 		//收到数据
 		if(readCmd((u8*)cat,&data_len,1020))
 		{
@@ -446,7 +445,7 @@ int getRpm(void)
 	//设置模式
 	setBroadcastMode(1);
 	writeCmd("at st 4b\r");
-	Delay_ms(20);
+	HAL_Delay(20);
 	//发送指令
 	writeCmd("F004\r");
 	
@@ -586,7 +585,7 @@ int getMiles(void)
 	//设置模式
 	setBroadcastMode(1);
 	writeCmd("at st 4b\r");
-	Delay_ms(20);	
+	HAL_Delay(20);	
 	//发送指令
 	//writeCmd("FEC1\r");//高精度
 	writeCmd("FEE0\r");
@@ -660,40 +659,127 @@ int getMiles(void)
 	return sub1;
 }
 
+/*自适应波特率*/
+int autoBaudRate(void)
+{
+	//设置波特率为250K
+	setsetBaudRate(250);
+	//测试波特率正确性
+	if(baudTest())
+		return 1;
+	HAL_IWDG_Refresh(&hiwdg);//复位看门狗
+	
+	//设置波特率为500K
+	setsetBaudRate(500);
+	//测试波特率正确性
+	if(baudTest())
+		return 2;
+	HAL_IWDG_Refresh(&hiwdg);//复位看门狗
+	
+	//恢复为默认250K波特率
+	setsetBaudRate(250);
+	HAL_IWDG_Refresh(&hiwdg);//复位看门狗
+	return 3;
+}
+
 /*设置波特率*/
 int setsetBaudRate(int deep)
 {
-    char cat[64];
-    int work = 0;
-    int ret = -1;
-
-    if(deep == 250){
-        goto tab_250;
-    } else if (deep == 500){
-        goto tab_500;
-    } else{
-        return 0;
-    }
-
-tab_250:
-    writeCmd("at pp 32 off\r");
-		Delay_ms(20);
-    goto end;
-
-tab_500:
-    writeCmd("at pp 32 sv 01\r");
-		Delay_ms(20);
-    writeCmd("at pp 32 on\r");
-    Delay_ms(20);
-
-end:
-    writeCmd("at ppp\r");
-    Delay_ms(20);
-    writeCmd("atz\r");
-    Delay_ms(50);
-		
+	char cat[64] = "";
+	u8 work = 0, data_len = 0, ret = 0;
+	
+	//250K波特率
+	if(deep == 250)				
+	{
+		writeCmd("at pp 32 off\r");
+		HAL_Delay(25);
+	} 
+	//500K波特率
+	else if(deep == 500)	
+	{
+		writeCmd("at pp 32 sv 01\r");
+		HAL_Delay(25);
+		writeCmd("at pp 32 on\r");
+		HAL_Delay(25);
+	} 
+	//不支持其他波特率
+	else
 		return 0;
+
+	work = data_len = ret = 0;
+	writeCmd("at ppp\r");		//保存寄存器设置
+	while(work++ < request_cycle)
+	{
+		//收到数据
+		memset(cat,0,sizeof(cat));
+		if(readCmd((u8*)cat,&data_len,200))
+		{
+			if(strstr(cat,"OK"))
+			{	
+				ret = 1;
+				break;
+			}
+		}
+		//没有收到数据
+		else 
+			continue;		
+	}
+	HAL_IWDG_Refresh(&hiwdg);//复位看门狗
+	if(!ret){
+		return ret;
+	}
+	
+	work = data_len = ret = 0;
+	writeCmd("atz\r");	//复位命令，使寄存器生效
+	while(work++ < request_cycle)
+	{
+		//收到数据
+		memset(cat,0,sizeof(cat));
+		if(readCmd((u8*)cat,&data_len,400))
+		{
+			if(strstr(cat,"DFL168"))
+			{
+				ret = 1;
+				break;
+			}
+		}
+		//没有收到数据
+		else 
+			continue;		
+	}
+	HAL_IWDG_Refresh(&hiwdg);//复位看门狗
+	return ret;
 }	
+
+/*测试当前波特率下是否有数据传输*/
+int baudTest(void)
+{
+	char cat[64] ="";
+	u8 work = 0, data_len = 0, ret = 0;
+
+	//尝试发送数据
+	writeCmd("FEF1\r");
+	//循环超时等待接收
+	while(work++ < request_cycle)
+	{
+		//收到数据
+		memset(cat,0,sizeof(cat));
+		if(readCmd((u8*)cat,&data_len,220))
+		{
+			if(strstr(cat,"not transmit"))//波特率错误
+				return 0;
+			else if(strstr(cat,"DATA"))		//波特率正确
+			{	
+				return 1;
+			}
+			ret = 1;	
+		}
+		//没有收到数据
+		else 
+			continue;		
+	}
+	return ret;
+}
 
 int setBroadcastMode(bool mode1)
 {
