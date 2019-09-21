@@ -292,7 +292,7 @@ int getVin(void)
 		Index[2] = strstr(cat, "03: ");
 		if(Index[0] && Index[1] && Index[2])
 		{
-			for(i = 0, ret = 1; i < 17; i++)
+			for(i = 0 ; i < 17; i++)
 			{
 				if(i < 7)
 				{
@@ -341,7 +341,7 @@ int getVin(void)
 		}
 	}
 	
-	if(!ret)
+	if(ret)
 	{
 		vin[17] = '\0';
 		memcpy(Vin_T.Data,vin,17);
