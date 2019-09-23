@@ -141,7 +141,7 @@ int main(void)
 	__HAL_UART_ENABLE_IT(&huart2, UART_IT_IDLE);
 	__HAL_UART_ENABLE_IT(&huart3, UART_IT_IDLE);
 	
-//	HAL_UART_Receive_DMA(&huart3,(uint8_t*)ReceiveBuff,UARTSIZE);
+	HAL_UART_Receive_DMA(&huart3,(uint8_t*)ReceiveBuff,UARTSIZE);
 	HAL_UART_Receive_DMA(&huart2,(uint8_t*)ReceiveBuff2,UARTSIZE);
 
 	/* 开启串口接收错误中断 */

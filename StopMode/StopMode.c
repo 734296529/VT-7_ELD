@@ -26,7 +26,7 @@ void Enter_StopMode(void)
   HAL_GPIO_WritePin(SLEEP_GPIO_Port, SLEEP_Pin, GPIO_PIN_RESET);
 
 	TIMERS_Stop(0);
-	TIMERS2_Stop(1);
+//	TIMERS2_Stop(1);
 	HAL_GPIO_WritePin(LED_ON_GPIO_Port,LED_ON_Pin,GPIO_PIN_SET);//µÆÏ¨Ãð
 	printf(" Enter StopMode!\r\n");
 	while(isStopMode)
@@ -56,7 +56,6 @@ void Enter_StopMode(void)
 
 void Sleep_Manage(void)
 {
-	printf("timercounter=%d, sleepCounter = %d\r\n",RTC_ReadTimeCounter(&hrtc),sleepCounter);
 	if(RTC_ReadTimeCounter(&hrtc) - sleepCounter >= sleepDelay)
 	{
 		Enter_StopMode();
