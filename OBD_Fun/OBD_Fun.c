@@ -857,12 +857,6 @@ int protHandler(u8* recvCmd,u8 len)
 		{	
 			SyncFlag = 0;		
 			u16 mStart=0,mEnd=0;
-		  printf("recv cmd:");
-			for(int m=0;m<10;m++)
-			{
-				printf("%02x",ProtRecvBuff[m]);
-			}
-			printf("\r\n");
 			mStart = (ProtRecvBuff[5]<<8) + (ProtRecvBuff[6]); 
 			mEnd   = (ProtRecvBuff[7]<<8) + (ProtRecvBuff[8]);
 			
@@ -1055,7 +1049,7 @@ int backup_2Flash(void)
 	{
 		W25QXX_Erase_Sector(BackupAddr);	//先擦除扇区
 	}
-	W25QXX_Write_NoCheck(write_buf[0],BackupAddr,sizeof(write_buf));	//存储4s的数据
+	W25QXX_Write(write_buf[0],BackupAddr,sizeof(write_buf));	//存储4s的数据
 
 	BackupAddr += sizeof(write_buf);		//存储地址偏移	
 	if(BackupAddr >= OBD_FLASH_END)			//控制地址在限定范围内
@@ -1075,7 +1069,7 @@ int backup_2Flash(void)
 	{
 		AddrIndex = ADDR_INDEX_START; 				//索引区地址返回首地址	
 		W25QXX_Erase_Sector(FLASH_ADDR(8190,0));		//先擦除索引区
-		W25QXX_Write_NoCheck(tmpbuf, AddrIndex, 8);	//更新索引区内容
+		W25QXX_Write(tmpbuf, AddrIndex, 8);	//更新索引区内容
 	}	
 	else
 	{
@@ -1129,58 +1123,45 @@ int backup_2Flash(void)
 int setSyncRange(u16 mStart,u16 mEnd)
 {
 //	printf("[setSyncRange]:mStart=%d,mEnd=%d\r\n",mStart,mEnd);
-
-	if(mStart<=mEnd || mStart>11520 || mEnd>11520) //同步时间段合理性判断
+	u16 backup_l = sizeof(backup_buf);
+	u8 tmpbuf = 0;
+	if(mStart<=mEnd || mStart>11520) //同步时间段合理性判断
 	{
 //		printf("[setSyncRange] fail 0\r\n");
 		return 0;
 	}
 	
-	u16 backup_l = sizeof(backup_buf);
-	SyncAddrStart = (BackupAddr >= mStart*backup_l) ? (BackupAddr - mStart*backup_l) : (FLASH_ADDR(8190,0) - (mStart*backup_l - BackupAddr));
-	SyncAddrEnd   = (BackupAddr >= mEnd*backup_l)   ? (BackupAddr - mEnd*backup_l)   : (FLASH_ADDR(8190,0) - (mEnd*backup_l - BackupAddr));
+	SyncAddrStart = (BackupAddr >= mStart*15*backup_l) ? (BackupAddr - mStart*15*backup_l) : (FLASH_ADDR(8190,0) - (mStart*15*backup_l - BackupAddr));
+	SyncAddrEnd   = BackupAddr;
 	SyncAddrNow   = SyncAddrStart;
 	
-	u8 tmpbuf[2][3] = {0};
-	W25QXX_Read(tmpbuf[0], SyncAddrStart,1);
-	W25QXX_Read(tmpbuf[1], SyncAddrEnd, 1);
+
+	W25QXX_Read(&tmpbuf, SyncAddrStart,1);
 	
-	if(tmpbuf[0][0]==tmpbuf[1][0] && tmpbuf[0][0] == 0xb0)//时间范围内都有效
+	if(tmpbuf == 0xb0)//时间范围内都有效
 	{
 		SyncFlag = 1;
 		return 1;
-	}
-	
-	if(tmpbuf[1][0]!=0xb0 && mEnd!=0)//该时间范围内无数据
-	{
-//		printf("[setSyncRange] fail 1\r\n");
-		return 0;
-	}
-	if(tmpbuf[0][0]==0xb0)
-	{
-		SyncFlag = 1;
-		return 1;
-	}
-		
-	if(tmpbuf[0][0]!=0xb0)
+	}	
+	else
 	{
 		u16 mid,low,high;
 		low = mEnd;
 		high = mStart;
 //		printf("low =%d,high = %d\r\n",low,high);
 		while(low<high)
-    {
+		{
 			if((low+1) == high)
 			{
-				SyncAddrStart = (BackupAddr >= high*backup_l) ? (BackupAddr - high*backup_l) : (FLASH_ADDR(8190,0) - (high*backup_l - BackupAddr));
+				SyncAddrStart = (BackupAddr >= high*15*backup_l) ? (BackupAddr - high*15*backup_l) : (FLASH_ADDR(8190,0) - (high*15*backup_l - BackupAddr));
 				SyncAddrNow = SyncAddrStart;
 				SyncFlag = 1;
 				return 1;
 			}
 			mid=(low+high)/2;
-			SyncAddrStart = (BackupAddr >= mid*backup_l) ? (BackupAddr - mid*backup_l) : (FLASH_ADDR(8190,0) - (mid*backup_l - BackupAddr));
-			W25QXX_Read(tmpbuf[0], SyncAddrStart, 1);
-			if(tmpbuf[0][0] == 0xb0)
+			SyncAddrStart = (BackupAddr >= mid*15*backup_l) ? (BackupAddr - mid*15*backup_l) : (FLASH_ADDR(8190,0) - (mid*15*backup_l - BackupAddr));
+			W25QXX_Read(&tmpbuf, SyncAddrStart, 1);
+			if(tmpbuf == 0xb0)
 			{
 				low = mid;
 			}
@@ -1188,7 +1169,6 @@ int setSyncRange(u16 mStart,u16 mEnd)
 			{
 				high = mid;
 			}
-			HAL_IWDG_Refresh(&hiwdg);//复位看门狗
 		}
 	}
 	
@@ -1242,13 +1222,12 @@ void sync_SendData(u8 mbuf[][32])
 
 	for(i=0;i<4;i++)
 	{				
-		memcpy(tmpbuf+5,&(mbuf[i][1]),19);	//备份数据
+		memcpy(tmpbuf+5,mbuf[i]+1,19);	//备份数据
 
 		tmpbuf[24] = getCRC8(tmpbuf+3,tmpbuf[2]);//检验码
 
 		HAL_UART_Transmit(&huart3,tmpbuf,26,0xFFFF);
 		HAL_Delay(10);
 	}
-	HAL_IWDG_Refresh(&hiwdg);//看门狗复位
 }
 
