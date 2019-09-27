@@ -15,12 +15,12 @@ volatile u8 recv_end_flag2 = 0, Rx_len2 = 0;
 //u8 rSpiData[PAGE_SIZE];
 
 volatile bool isStopMode = 0;			//睡眠模式标志位
-volatile u32 sleepDelay = 300;		//熄火延时休眠时间(s)
+volatile u32 sleepDelay = 1200;		//熄火延时休眠时间(s)
 volatile u32 sleepCounter = 0;		//当前熄火时间(s)
 volatile u8 backupSwitch = 0;			//当前存储开关
 volatile bool isStartUp = 1;			//发动机点火状态
-volatile u8 SyncFlag = 0;	 				//数据同步标志位
-volatile u8 StoreFlag = 0;	 			//数据写入标志位
+volatile u8 SyncFlag = 0;					//数据同步标志位
+volatile u8 StoreFlag = 0;				//数据写入标志位
 volatile u8 obd_Rdy = 0;
 volatile u8 recv_OK = 0;					//上位机应答标志
 u8 ProtRecvBuff[150]={0};					//上位机指令缓存
@@ -35,12 +35,11 @@ volatile u32 SyncAddrEnd=0;				//数据同步结束地址
 
 void Delay_ms(int ms)
 {
-	HAL_IWDG_Refresh(&hiwdg);//复位看门狗
-	int t = ms / 1800;
-	int res = ms % 1800;
+	int t = ms / 2000;
+	int res = ms % 2000;
 	for(; t>0 ;t--)
 	{
-		HAL_Delay(1800);
+		HAL_Delay(2000);
 		HAL_IWDG_Refresh(&hiwdg);//复位看门狗
 	}
 	HAL_Delay(res);
@@ -103,7 +102,7 @@ u8 Flash_Check(void)
 {
 	u8 tmpbuf[256] = {0};
 	u8 m = 0;
-	u8 check_data[16] = {0X55, 0XFA, 0X01, 0X23, 0X45, 0X67, 0X89, 0X09, 0X00, 0XEE};
+	u8 check_data[16] = {0X55, 0XFA, 0X01, 0X23, 0X45, 0X67, 0X89, 0X09, 0X26, 0XEE};
 	for(m=0;m<5;m++)
 	{
 		W25QXX_Read(tmpbuf,FLASH_ADDR(8191,0),10); //识别使用标识

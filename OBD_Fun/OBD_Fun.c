@@ -66,7 +66,7 @@ void J1939_getData(void)
 {
 	u32 tmp = RTC_ReadTimeCounter(&hrtc);
 	static u8 i = 0;
-	if(tmp - TimeStamp > 0)
+	if(tmp - TimeStamp > 1)
 	{
 		TimeStamp = tmp;
 		
@@ -133,101 +133,6 @@ int OBD_TtoP(OBD_T data_t,u8* data_p)
 	memcpy(data_p+5,data_t.Data,data_t.length);		//参数
 	data_p[5+data_t.length] = getCRC8(data_p+3, data_p[2]);	//CRC校验
 	data_p[6+data_t.length] = 0XEE;	//协议尾
-	return 1;
-}
-/*
-//数据备份至Flash
-int OBD_backupData(void)
-{
-	OBD_backupFun(Vss_P);
-	OBD_backupFun(Rpm_P);
-	OBD_backupFun(EngineHours_P);
-	OBD_backupFun(Miles_P);	
-	return 1;
-}
-
-int OBD_backupFun(u8* protocolData)
-{
-//	memset(rSpiData,0,255);
-
-	W25QXX_Write(protocolData,BackupAddr,16);
-	//同步地址偏移
-	BackupAddr += 16;
-	if(BackupAddr == OBD_FLASH_END)
-	{
-		BackupAddr = OBD_FLASH_START;	
-	}
-	if(BackupAddr%(SECTOR_SIZE*4) == 0)
-	{
-		OBD_refreshBackupAddr(BackupAddr);
-	}
-	return 1;
-}
-*/
-int OBD_sendBackup(void)
-{
-	u8 tmpbuf[16] = {0};
-	if(SyncAddr == OBD_FLASH_END)
-		SyncAddr = OBD_FLASH_START;
-	if(BackupAddr == SyncAddr)
-	{
-		SyncFlag = 0;
-		return 1;
-	}
-	
-	W25QXX_Read(tmpbuf,SyncAddr,16);
-	if(getCRC8(tmpbuf+3,tmpbuf[2]) != tmpbuf[2]+3)//数据校验出错
-	{
-		SyncAddr += 16;		//跳过本条数据
-		return 1;
-	}
-	
-	OBD_transBackup(tmpbuf,SyncAddr);	//发送数据
-	SyncAddr += 16;
-
-	return 1;		
-}
-
-int OBD_transBackup(u8* data,u32 addr)
-{
-	u8 tmpbuf[32] = {0};
-	
-	tmpbuf[0] = 0X55;		//协议头
-	tmpbuf[1] = 0XFA;		//协议头
-	tmpbuf[2] = data[2]+4;	//长度：参数+指令码
-	tmpbuf[3] = 0XB0;				//指令码
-	tmpbuf[4] = data[4];		//指令码
-	tmpbuf[5] = addr >> 24;	//参数：Flash地址
-	tmpbuf[6] = addr >> 16;
-	tmpbuf[7] = addr >> 8;
-	tmpbuf[8] = addr;
-	memcpy(tmpbuf+9,data+5,data[2]-2);		//参数:值+时间
-	tmpbuf[3+tmpbuf[2]] = getCRC8(tmpbuf+3, tmpbuf[2]);	//CRC校验值
-	tmpbuf[4+tmpbuf[2]] = 0XEE;	//协议尾
-	
-//	HAL_UART_Transmit(&huart3,tmpbuf,tmpbuf[2]+5,0xFFFF);
-	
-	u32 tmp = 0xFFFF;
-	while(tmp--)
-	{
-		//上位机应答正确
-		if(recv_OK)
-		{
-			recv_OK = 0;
-			return 1;
-		}
-	}
-	return 0;	
-}
-
-int OBD_refreshBackupAddr(u32 addr)
-{
-	u8 tmpbuf[16] = {0};
-	tmpbuf[0] =addr >> 24;
-	tmpbuf[1] =addr >> 16;
-	tmpbuf[2] =addr >> 8;
-	tmpbuf[3] =addr;
-	W25QXX_Write(tmpbuf,FLASH_ADDR(1,0),16);
 	return 1;
 }
 
@@ -317,26 +222,6 @@ int getVin(void)
 					break;
 				}
 			}
-#if 0		
-			for(i = 0; i < 7; i++)
-			{
-				hex[0] = Index[0][4+i*3];
-				hex[1] = Index[0][5+i*3];
-				vin[i] = charhextoascii(hex);				
-			}
-			for(i = 0; i < 7; i++)
-			{
-				hex[0] = Index[1][4+i*3];
-				hex[1] = Index[1][5+i*3];
-				vin[i+7] = charhextoascii(hex);
-			}
-			for(i = 0; i < 3; i++)
-			{
-				hex[0] = Index[2][4+i*3];
-				hex[1] = Index[2][5+i*3];
-				vin[i+14] = charhextoascii(hex);
-			}
-#endif
 			
 		}
 	}
@@ -413,7 +298,7 @@ int getVss(void)
 	{
 		u32 a = htoi(cat[6]);
 		u32 b = htoi(cat[7]);
-		sub = a * 16 + b;		
+		sub = (a<<4) + b;		
 	}
 	
 	if(sub && sub <=251)
@@ -473,7 +358,8 @@ int getRpm(void)
 		u32 b = htoi(cat[10]);
 		u32 c = htoi(cat[12]);
 		u32 d = htoi(cat[13]);
-		sub = (c*16 + d)*32 + (a*16 + b)/8;
+//		sub = (c*16 + d)*32 + (a*16 + b)/8;
+		sub = ((c<<12) + (d<<8) + (a<<4) + b) >> 3 ;
 	}
 
 	if(sub && sub <= 8032)
@@ -519,6 +405,7 @@ int getEngineHours(void)
 	
 	//设置模式
 	setBroadcastMode(0);
+
 	//发送指令
 	writeCmd("FEE5\r");
 	
@@ -545,7 +432,7 @@ int getEngineHours(void)
 		u32 b = charhextoascii(cat+3);
 		u32 c = charhextoascii(cat+6);
 		u32 d = charhextoascii(cat+9);
-		sub = (a +b*256 + c*65536 + d*16777216)/20;//引擎时间
+		sub = (a +(b<<8) + (c<<16) + (d<<24)) / 20;//引擎时间
 	}
 	
 	if(sub && sub<210554061){
@@ -621,8 +508,10 @@ int getMiles(void)
 		u32 h = charhextoascii(cat+21);
 //		sub0 = (a +b*256 + c*65536 + d*16777216)/200;//总里程
 //		sub1 = (e +f*256 + g*65536 + h*16777216)/200;//短里程
-		sub1 = (a +b*256 + c*65536 + d*16777216)/8;//短里程
-		sub0 = (e +f*256 + g*65536 + h*16777216)/8;//总里程
+//		sub1 = (a +b*256 + c*65536 + d*16777216)/8;//短里程
+//		sub0 = (e +f*256 + g*65536 + h*16777216)/8;//总里程
+		sub1 = (a +(b<<8) + (c<<16) + (d<<24)) >> 3;//短里程
+		sub0 = (e +(f<<8) + (g<<16) + (h<<24)) >> 3;//总里程		
 	}
 
 	if(sub1 && sub1<526385152)
@@ -1004,6 +893,50 @@ int setSleepDelay(u8 slpDly)
 u8 backup_buf[4][32] = {0};
 int backup_Handler(u8 i)
 {
+	//帧头
+	backup_buf[i][0] = 0x55;
+	backup_buf[i][1] = 0xFA;
+	
+	//长度
+	backup_buf[i][2] = 0x15;
+	
+	//指令码
+	backup_buf[i][3] = 0xB0;
+	backup_buf[i][4] = 0x00;
+	
+	//参数(值+时间戳)
+	/*发动机时间*/
+	backup_buf[i][5] = EngineHours_T.Data[0];
+	backup_buf[i][6] = EngineHours_T.Data[1];
+	backup_buf[i][7] = EngineHours_T.Data[2];
+	backup_buf[i][8] = EngineHours_T.Data[3];
+	/*车速*/
+	backup_buf[i][9] = Vss_T.Data[0];
+	/*转速*/
+	backup_buf[i][10] = Rpm_T.Data[0];
+	backup_buf[i][11] = Rpm_T.Data[1];
+	/*短里程*/
+	backup_buf[i][12] = Miles_T.Data[0];
+	backup_buf[i][13] = Miles_T.Data[1];
+	backup_buf[i][14] = Miles_T.Data[2];
+	backup_buf[i][15] = Miles_T.Data[3];
+	/*总里程*/
+	backup_buf[i][16] = TotalMiles_T.Data[0];
+	backup_buf[i][17] = TotalMiles_T.Data[1];
+	backup_buf[i][18] = TotalMiles_T.Data[2];
+	backup_buf[i][19] = TotalMiles_T.Data[3];
+	/*时间戳*/
+	backup_buf[i][20]  = (TimeStamp >> 24);
+	backup_buf[i][21]  = (TimeStamp >> 16);
+	backup_buf[i][22] = (TimeStamp >> 8);
+	backup_buf[i][23] = TimeStamp;
+	
+	//校验码
+	backup_buf[i][24] = getCRC8(backup_buf[i]+3,backup_buf[i][2]);;
+	
+	//帧尾
+	backup_buf[i][25] = 0xEE;
+/*	
 	//数据头
 	backup_buf[i][0] = 0xB0;
 	//发动机时间
@@ -1033,7 +966,7 @@ int backup_Handler(u8 i)
 	backup_buf[i][19] = TimeStamp;
 	
 	backup_buf[i][20] = getCRC8(backup_buf[i],20);
-	
+*/	
 	if(i==3) //每隔4秒存储一次数据
 	{
 		StoreFlag = 1;
@@ -1138,7 +1071,7 @@ int setSyncRange(u16 mStart,u16 mEnd)
 
 	W25QXX_Read(&tmpbuf, SyncAddrStart,1);
 	
-	if(tmpbuf == 0xb0)//时间范围内都有效
+	if(tmpbuf == 0x55)//时间范围内都有效
 	{
 		SyncFlag = 1;
 		return 1;
@@ -1161,7 +1094,7 @@ int setSyncRange(u16 mStart,u16 mEnd)
 			mid=(low+high)/2;
 			SyncAddrStart = (BackupAddr >= mid*15*backup_l) ? (BackupAddr - mid*15*backup_l) : (FLASH_ADDR(8190,0) - (mid*15*backup_l - BackupAddr));
 			W25QXX_Read(&tmpbuf, SyncAddrStart, 1);
-			if(tmpbuf == 0xb0)
+			if(tmpbuf == 0x55)
 			{
 				low = mid;
 			}
@@ -1191,7 +1124,7 @@ void sync_Handler(void)
 
 //	printf("[sync_Handler]:0x%08x = 0x%02x\r\n",SyncAddrNow,tmpbuf[0][0]);
 	
-	if(tmpbuf[0][0]==0xb0)//有效的历史数据地址
+	if(tmpbuf[0][0]==0x55 && tmpbuf[0][1]==0xFA)//有效的历史数据地址
 	{
 		sync_SendData(tmpbuf);
 	}
@@ -1205,14 +1138,15 @@ void sync_Handler(void)
 	{
 		mcuReply(0x0003,0xAA);
 		SyncFlag = 0;
-		return;
 	}
 }
 
 void sync_SendData(u8 mbuf[][32])
 {
+	
 	u8 tmpbuf[30] = {0};
 	int i = 0;
+/*
 	tmpbuf[0] = 0X55;
 	tmpbuf[1] = 0XFA;		//协议头
 	tmpbuf[2] = 0X15;		//长度21字节
@@ -1226,6 +1160,13 @@ void sync_SendData(u8 mbuf[][32])
 
 		tmpbuf[24] = getCRC8(tmpbuf+3,tmpbuf[2]);//检验码
 
+		HAL_UART_Transmit(&huart3,tmpbuf,26,0xFFFF);
+		HAL_Delay(10);
+	}
+*/
+	for(i=0;i<4;i++)
+	{				
+		memcpy(tmpbuf,mbuf[i],26);	//拷贝历史数据
 		HAL_UART_Transmit(&huart3,tmpbuf,26,0xFFFF);
 		HAL_Delay(10);
 	}

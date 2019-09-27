@@ -20,12 +20,6 @@ void J1939_getData(void);
 int OBD_transData(u8* protocolData);
 int OBD_TtoP(OBD_T data_t,u8* data_p);
 
-//int OBD_backupData(void);
-//int OBD_backupFun(u8* protocolData);
-int OBD_sendBackup(void);
-int OBD_transBackup(u8* data,u32 addr);
-//int OBD_refreshBackupAddr(u32 addr);
-
 int getVin(void);
 int getVss(void);
 int getRpm(void);
