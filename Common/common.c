@@ -5,10 +5,14 @@
 #include "../CRC8/CRC8.h"
 
 /* 串口可接收最大字符个数 */                                
-u8 ReceiveBuff[UARTSIZE];	//串口接收缓冲区
+u8 ReceiveBuff[UARTSIZE];											//DMA接收缓冲区
 u8 ReceiveBuff2[UARTSIZE];
 volatile u8 recv_end_flag = 0, Rx_len = 0;		//串口接收缓冲中断标志,接收字符长度
 volatile u8 recv_end_flag2 = 0, Rx_len2 = 0;
+
+u8 dataCache[UARTSIZE];						//串口数据缓存区
+volatile u16 pgn_Flag = 0x0;				//PGN记录
+
 
 /* SPI读写FLASH的缓冲区变量 */
 //u8 wSpiData[PAGE_SIZE];
@@ -17,21 +21,23 @@ volatile u8 recv_end_flag2 = 0, Rx_len2 = 0;
 volatile bool isStopMode = 0;			//睡眠模式标志位
 volatile u32 sleepDelay = 1200;		//熄火延时休眠时间(s)
 volatile u32 sleepCounter = 0;		//当前熄火时间(s)
-volatile u8 backupSwitch = 0;			//当前存储开关
+volatile u32 delayStart = 0;			//超时等待起始时间
+volatile u32 delayCounter = 0;		//超时等待时间
+volatile u8 delayTimes = 0;				//超时等待次数
 volatile bool isStartUp = 1;			//发动机点火状态
 volatile u8 SyncFlag = 0;					//数据同步标志位
 volatile u8 StoreFlag = 0;				//数据写入标志位
-volatile u8 obd_Rdy = 0;
+volatile u8 SendFlag = 0;					//发送数据标志位
+volatile u8 ELD_Rdy = 0;					//初始化完成标志
 volatile u8 recv_OK = 0;					//上位机应答标志
 u8 ProtRecvBuff[150]={0};					//上位机指令缓存
-volatile u8 ProtRecvLen = 0;	  	//上位机指令长度
+volatile u8 ProtRecvLen = 0;			//上位机指令长度
 volatile u32 BackupAddr=0;				//数据备份地址
 volatile u32 AddrIndex=0;					//备份索引地址
 volatile u32 SyncAddr =0;					//数据同步地址
 volatile u32 SyncAddrNow=0;				//数据同步当前地址
 volatile u32 SyncAddrStart=0;			//数据同步起始地址
 volatile u32 SyncAddrEnd=0;				//数据同步结束地址
-
 
 void Delay_ms(int ms)
 {

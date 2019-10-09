@@ -98,9 +98,10 @@ PUTCHAR_PROTOTYPE
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  isStopMode = OFF;
+	isStopMode = OFF;
 	SyncFlag = 0;
-	obd_Rdy = 0;
+	ELD_Rdy = 0;
+	pgn_Flag = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
@@ -160,33 +161,33 @@ int main(void)
 	Flash_Check();
 
 	/* 软定时器管理 */
-	TIMERS_Add(0,200,1,LED_Manage);//LED指示灯管理
+	TIMERS_Add(0,500,1,LED_Manage);//LED指示灯管理
 	TIMERS_Start(0);
 	
-//	TIMERS2_Add(1,1,1,OBD_Run);//开始读取读取发送ECU数据
+//	TIMERS2_Add(0,1,1,OBD_funStart);//ELD数据获取间隔
 	Delay_ms(5000);//等待DFL168上电启动
-	DFL168_Init();//STN1110初始化
+	DFL168_Init();//DFL168初始化
 	
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+	while (1)
+	{
 		HAL_IWDG_Refresh(&hiwdg);//复位看门狗
 			
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-		if(obd_Rdy)
+		if(ELD_Rdy)
 		{
-			J1939_getData();
+			J1939_Handler();
 		}
-		if(SyncFlag==1)
+		if(SyncFlag)
 		{
 			sync_Handler();
 		}
-		if(StoreFlag == 1)
+		if(StoreFlag)
 		{
 			backup_2Flash();
 			StoreFlag = 0;

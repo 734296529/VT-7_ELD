@@ -397,11 +397,17 @@ void USART2_IRQHandler(void)
 			temp = __HAL_DMA_GET_COUNTER(&hdma_usart2_rx);
 			/* 计算串口接收到的数据个数 */
 			Rx_len2 =  UARTSIZE - temp;
+			memcpy(dataCache,ReceiveBuff2,Rx_len2);
+			/*	清空接收缓存区	*/
+			memset(ReceiveBuff2,0,sizeof(ReceiveBuff2));	
+			/*	开启下一次接收	*/
+			HAL_UART_Receive_DMA(&huart2,(uint8_t*)ReceiveBuff2,UARTSIZE);
 			recv_end_flag2 = 1;
 		}
 	}
+	
 #if 0
-	if(obd_Rdy==0)
+	if(ELD_Rdy==0)
 	{
 		/*	清空接收缓存区	*/
 		memset(ReceiveBuff2,0,sizeof(ReceiveBuff2));	

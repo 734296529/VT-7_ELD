@@ -14,11 +14,13 @@ int DFL168_Init(void);
 
 void OBD_funStart(void);
 void OBD_funStop(void);
-void OBD_Run(void);
 
-void J1939_getData(void);
-int OBD_transData(u8* protocolData);
-int OBD_TtoP(OBD_T data_t,u8* data_p);
+void J1939_Handler(void);
+void sendPGN(void);
+void recvPGN(void);
+void sendData(void);
+int ELD_transData(u8* protocolData);
+int ELD_TtoP(OBD_T data_t,u8* data_p);
 
 int getVin(void);
 int getVss(void);

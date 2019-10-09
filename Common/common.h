@@ -26,17 +26,15 @@ extern u8 ReceiveBuff2[UARTSIZE];
 extern volatile u8 recv_end_flag, Rx_len;		//串口接收缓冲中断标志,接收字符长度
 extern volatile u8 recv_end_flag2, Rx_len2;
 
-#define OBD_FLASH_START		0x00000000	  
+extern u8 dataCache[UARTSIZE];				//串口数据缓存区
+extern volatile u16 pgn_Flag;					//PGN记录
+
+#define OBD_FLASH_START		0x00000000	   
 #define OBD_FLASH_END    	0X01FFDFFF
 
 #define ADDR_INDEX_START  0x01FFE000
 #define ADDR_INDEX_END    0x01FFEFFF
-//typedef struct backupaddr_t
-//{
-//	u8 isLooped;
-//	u32 addr;
-//}BACKUPADDR_T;
-//extern BACKUPADDR_T BackupAddr_t;
+
 /* SPI读写FLASH的缓冲区变量 */
 //extern u8 wSpiData[PAGE_SIZE];
 //extern u8 rSpiData[PAGE_SIZE];
@@ -44,11 +42,14 @@ extern volatile u8 recv_end_flag2, Rx_len2;
 extern volatile bool isStopMode;		//睡眠模式标志位
 extern volatile u32 sleepDelay;			//熄火延时休眠时间(s)
 extern volatile u32 sleepCounter;		//当前熄火时间(s)
-extern volatile u8 backupSwitch;		//当前存储开关
+extern volatile u32 delayStart;			//超时等待起始时间
+extern volatile u32 delayCounter;		//超时等待时间
+extern volatile u8 delayTimes;			//超时等待次数
 extern volatile bool isStartUp;			//发动机点火状态
 extern volatile u8 SyncFlag;				//数据同步标志位
 extern volatile u8 StoreFlag;	 			//数据写入标志位
-extern volatile u8 obd_Rdy;			
+extern volatile u8 SendFlag;				//发送数据标志位
+extern volatile u8 ELD_Rdy;					//初始化完成标志 
 
 extern volatile u8 recv_OK;					//上位机应答标志
 extern u8 ProtRecvBuff[150];				//上位机指令缓存
@@ -68,4 +69,3 @@ int getSpaceNum(char *str); //计算字符串中空格数量
 int checkASCIIRange(char s);//判断字符的合法性
 u8 Flash_Check(void);
 #endif 
-

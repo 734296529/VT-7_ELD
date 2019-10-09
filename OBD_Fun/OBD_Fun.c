@@ -8,9 +8,10 @@
 #include "../W25QXX/W25QXX.h"
 #include "../CRC8/CRC8.h"
 #include "../Stmflash/stmflash.h"
-
-volatile bool Vin_ed = 0; //VinÂëÊÇ·ñÒÑµÃµ
 #define request_cycle 3
+
+volatile bool Vin_ed = 0; //VinÂëÊÇ·ñÒÑ»ñÈ¡
+
 //»º´æÊı¾İ
 u32 TimeStamp = 0;
 OBD_T Vin_T = {0};
@@ -29,39 +30,63 @@ u8 TotalMiles_P[64] = {0};
 
 int DFL168_Init(void)
 {
-	writeCmd("AT SP A\r");//Ñ¡Ôñ1939Ğ­Òé
-	HAL_Delay(40);
-
-	printf("autoBaudRate=%d\r\n",autoBaudRate());
-	HAL_Delay(40);
-
+	static u8 i = 1;
+	if(i)
+	{
+		writeCmd("AT SP A\r");//Ñ¡Ôñ1939Ğ­Òé
+		HAL_Delay(20);
+		printf("autoBaudRate=%d\r\n",autoBaudRate());
+		HAL_Delay(20);
+		i = 0;
+	}	
 	writeCmd("AT SLEEP PIN 1\r");
-	HAL_Delay(40);
+	HAL_Delay(20);	
 	writeCmd("AT SLEEP P 0\r");
-	HAL_Delay(40);
-	
+	HAL_Delay(20);
+
 	OBD_funStart();
 	return 1;
 }
 
 void OBD_funStart(void)
 {
-  SyncFlag = 0;
-	//TIMERS2_Start(1);
-	obd_Rdy=1;
+	SyncFlag = 0;
+	ELD_Rdy = 1;
 }
 void OBD_funStop(void)
 {
-	obd_Rdy = 0;
-	TIMERS2_Stop(1);
+	ELD_Rdy = 0;
 }
 
-void OBD_Run(void)
+void J1939_Handler(void)
 {
-	obd_Rdy = 1;
-	J1939_getData();	//´®¿Ú2»ñÈ¡OBDÊı¾İ
-}
+	//×¼±¸·¢ËÍÇëÇó
+	if(pgn_Flag == 0)
+	{
+		sendPGN();
+	}
+	//pgn_Flag!=0³¬Ê±Ã»ÓĞÊÕµ½Ó¦´ğ
+	else if(HAL_GetTick() - delayStart > delayCounter)
+	{
+		SendFlag = 1;
+	}
+	
+	//ÊÕµ½168Ğ¾Æ¬Ó¦´ğ
+	if(recv_end_flag2)
+	{
+		recvPGN();
+		recv_end_flag2 = 0;
+	}
+	//·¢ËÍÊµÊ±Êı¾İ
+	if(SendFlag)
+	{
+		sendData();
+		SendFlag = 0;
+		pgn_Flag = 0;
+	}
 
+}
+/*
 void J1939_getData(void)
 {
 	u32 tmp = RTC_ReadTimeCounter(&hrtc);
@@ -101,9 +126,260 @@ void J1939_getData(void)
 		HAL_IWDG_Refresh(&hiwdg);//¸´Î»¿´ÃÅ¹·
 	}
 }
+*/
+
+void sendPGN(void)
+{
+	static u8 i = 0;
+	u32 tmp = 0;
+
+	if(i>4)
+		i = 0;
+
+	switch(i)
+	{
+		case 0://Rpm×ªËÙ
+		{
+			//»ñÈ¡Ê±¼ä´Á
+			tmp = RTC_ReadTimeCounter(&hrtc);
+			if(tmp - TimeStamp > 1)
+				TimeStamp = tmp;
+			else
+				return;
+			//ÉèÖÃ¹ã²¥Ä£Ê½
+			setBroadcastMode(1);
+			//ÉèÖÃ³¬Ê±Ê±¼ä300ms
+			writeCmd("at st 4b\r");
+			//·¢ËÍÇëÇó
+			memset(&Rpm_T,0,sizeof(OBD_T));	
+			writeCmd("F004\r");
+			delayStart = HAL_GetTick();
+			delayCounter = 310;
+			pgn_Flag = 0xf004;
+			i++;
+		}
+			break;
+			
+		case 1://Vss³µËÙ
+		{
+			//ÉèÖÃ¹ã²¥Ä£Ê½
+			setBroadcastMode(1);			
+			//ÉèÖÃ³¬Ê±Ê±¼ä200ms
+			writeCmd("at st 32\r");
+			HAL_Delay(40);
+			//·¢ËÍÇëÇó
+			memset(&Vss_T,0,sizeof(OBD_T));	
+			recv_end_flag2 = 0;
+			writeCmd("FEF1\r");
+			delayStart = HAL_GetTick();
+			delayCounter = 210;
+			pgn_Flag = 0xfef1;
+			i++;
+		}
+			break;	
+
+		case 2://MilesÀï³ÌÊı
+		{
+			//ÉèÖÃ¹ã²¥Ä£Ê½
+			setBroadcastMode(1);
+			//ÉèÖÃ³¬Ê±Ê±¼ä300ms
+			writeCmd("at st 4b\r");	
+			//·¢ËÍÇëÇó
+			memset(&Miles_T,0,sizeof(OBD_T));
+			memset(&TotalMiles_T,0,sizeof(OBD_T));	
+			writeCmd("FEE0\r");
+			delayStart = HAL_GetTick();
+			delayCounter = 310;
+			pgn_Flag = 0xfee0;
+			i++;
+		}
+			break;
+		
+		case 3://Vin³µ¼ÜºÅ
+		{
+			if(Vin_ed)
+			{
+				pgn_Flag = 0xfeec;
+				SendFlag = 1;
+				i++;
+				break;
+			}
+			//ÉèÖÃ·Ç¹ã²¥Ä£Ê½
+			setBroadcastMode(0);
+			//ÉèÖÃ³¬Ê±Ê±¼ä1000ms
+			writeCmd("at st 4b\r");
+			//·¢ËÍÇëÇó
+			memset(&Vin_T,0,sizeof(OBD_T));	
+			writeCmd("FEEC\r");
+			delayStart = HAL_GetTick();
+			delayCounter = 1010;
+			pgn_Flag = 0xfeec;
+			i++;
+		}
+			break;
+		
+		case 4://EngineHoursÒıÇæÊ±¼ä
+		{
+			//ÉèÖÃ·Ç¹ã²¥Ä£Ê½
+			setBroadcastMode(0);
+			//ÉèÖÃ³¬Ê±Ê±¼ä300ms
+			writeCmd("at st 4b\r");
+			//ÉèÖÃÇëÇóÄ£Ê½
+			//setBroadcastMode(0);
+			//·¢ËÍÇëÇó
+			memset(&EngineHours_T,0,sizeof(OBD_T));	
+			writeCmd("FEE5\r");
+			delayStart = HAL_GetTick();
+			delayCounter = 310;
+			pgn_Flag = 0xfee5;
+			i++;
+		}
+			break;
+		
+		default:
+			i = 0;
+			break;
+	}
+
+}
+
+void recvPGN(void)
+{
+	if(Rx_len2 < 10)
+	{
+		delayStart = HAL_GetTick();
+		return ;
+	}
+	
+	switch(pgn_Flag)
+	{
+	
+		//EngineHours·¢¶¯»úÊ±¼ä 
+		case 0xfee5:
+			getEngineHours();
+			break;
+			
+		//Vss³µËÙ
+		case 0xfef1:
+			getVss();
+			break;
+
+		//Rpm×ªËÙ
+		case 0xf004:
+			getRpm();
+			break;
+
+		//MilesÀï³ÌÊı
+		case 0xfee0:
+			getMiles();
+			break;
+
+		//VIN³µ¼ÜºÅ
+		case 0xfeec:
+			getVin();
+			break;
+
+		default:
+			break;
+	}
+
+}
+
+void sendData(void)
+{
+	static u8 i = 0;
+	switch(pgn_Flag)
+	{	
+		//Vss³µËÙ	
+		case 0xfef1:
+		{
+			Vss_T.Data[1] = TimeStamp >> 24;
+			Vss_T.Data[2] = TimeStamp >> 16;
+			Vss_T.Data[3] = TimeStamp >> 8;
+			Vss_T.Data[4] = TimeStamp;
+			Vss_T.length = 5;
+			Vss_T.type = 0X03;
+		
+			ELD_TtoP(Vss_T,Vss_P);
+			ELD_transData(Vss_P);
+		}
+			break;
+
+		//Rpm×ªËÙ
+		case 0xf004:
+		{
+			Rpm_T.Data[2] = TimeStamp >> 24;
+			Rpm_T.Data[3] = TimeStamp >> 16;
+			Rpm_T.Data[4] = TimeStamp >> 8;
+			Rpm_T.Data[5] = TimeStamp;
+			Rpm_T.length = 6;
+			Rpm_T.type = 0X04;
+			ELD_TtoP(Rpm_T,Rpm_P);
+			ELD_transData(Rpm_P);
+		}
+			break;
+
+		//MilesÀï³ÌÊı
+		case 0xfee0:
+		{
+			TotalMiles_T.Data[4] = Miles_T.Data[4] = TimeStamp >> 24;
+			TotalMiles_T.Data[5] = Miles_T.Data[5] = TimeStamp >> 16;
+			TotalMiles_T.Data[6] = Miles_T.Data[6] = TimeStamp >> 8;
+			TotalMiles_T.Data[7] = Miles_T.Data[7] = TimeStamp;
+			TotalMiles_T.length = Miles_T.length = 8;
+			Miles_T.type = 0X05;
+			TotalMiles_T.type = 0X06;
+			
+			ELD_TtoP(TotalMiles_T,TotalMiles_P);	
+			ELD_TtoP(Miles_T,Miles_P);
+			ELD_transData(Miles_P);
+			HAL_Delay(40);
+			ELD_transData(TotalMiles_P);
+		}
+			break;
+
+		//VIN³µ¼ÜºÅ
+		case 0xfeec:
+		{
+			Vin_T.Data[17] = TimeStamp >> 24;
+			Vin_T.Data[18] = TimeStamp >> 16;
+			Vin_T.Data[19] = TimeStamp >> 8;
+			Vin_T.Data[20] = TimeStamp;
+			Vin_T.length = 21;
+			Vin_T.type = 0X01;
+			
+			ELD_TtoP(Vin_T,Vin_P);
+			ELD_transData(Vin_P);
+		}
+			break;
+			
+		//EngineHours·¢¶¯»úÊ±¼ä 
+		case 0xfee5:
+		{
+			EngineHours_T.Data[4] = (TimeStamp >> 24);
+			EngineHours_T.Data[5] = (TimeStamp >> 16);
+			EngineHours_T.Data[6] = (TimeStamp >> 8);
+			EngineHours_T.Data[7] = TimeStamp;
+			EngineHours_T.length =	8;
+			EngineHours_T.type = 0X02 ;
+			
+			ELD_TtoP(EngineHours_T,EngineHours_P);
+			ELD_transData(EngineHours_P);
+			//±¸·İÊı¾İ
+			backup_Handler(i++);
+			if(i>=4)
+				i = 0;
+		}
+			break;
+
+		default:
+			break;
+	}
+	
+}
 
 
-int OBD_transData(u8* protocolData)
+int ELD_transData(u8* protocolData)
 {
 	u32 tmp = 0xFFFF;
 	
@@ -116,11 +392,10 @@ int OBD_transData(u8* protocolData)
 			return 1;
 		}
 	}
-
 	return 0;	
 }
 
-int OBD_TtoP(OBD_T data_t,u8* data_p)
+int ELD_TtoP(OBD_T data_t,u8* data_p)
 {
 	memset(data_p,0,32);
 //	if(!data_t.length)//¿ÕÊı¾İ
@@ -139,6 +414,67 @@ int OBD_TtoP(OBD_T data_t,u8* data_p)
 /*
 	»ñÈ¡Vin³µÁ¾Ê¶±ğÂë(×Ö·û´®ÀàĞÍ)
 */
+int getVin(void)
+{
+	char cat[128] = "";
+	char vin[18] = "";
+	u8 ret = 1;		
+	
+	memcpy(cat,dataCache,Rx_len2);	
+	if (getSpaceNum(cat) >= 21) 
+	{
+		char* Index[3]  = {0};
+		int i = 0;	
+		char hex[2] = {0};
+		Index[0] = strstr(cat, "01: ");
+		Index[1] = strstr(cat, "02: ");
+		Index[2] = strstr(cat, "03: ");
+		if(Index[0] && Index[1] && Index[2])
+		{
+			for(i = 0 ; i < 17; i++)
+			{
+				if(i < 7)
+				{
+					hex[0] = Index[0][4+i*3];
+					hex[1] = Index[0][5+i*3];
+				}
+				else if(i < 14)
+				{
+					hex[0] = Index[1][4+(i-7)*3];
+					hex[1] = Index[1][5+(i-7)*3];
+				}
+				else
+				{
+					hex[0] = Index[2][4+(i-14)*3];
+					hex[1] = Index[2][5+(i-14)*3];			
+				}
+				vin[i] = charhextoascii(hex);
+				//ÅĞ¶Ï×Ö·ûºÏ·¨ĞÔ
+				if(!checkASCIIRange(vin[i]))
+				{
+					ret = 0;
+					break;
+				}
+			}
+			
+		}
+	}
+
+	if(ret)
+	{
+		memcpy(Vin_T.Data,vin,17);
+	}
+	vin[17] = '\0'; 
+
+	if(vin[0]!=vin[1] || vin[0]!=vin[2] || vin[0]!=vin[3] || vin[0]!=vin[4])
+	{
+		Vin_ed = 1;
+	}
+	SendFlag = 1;
+	
+	return 1;
+}
+/*
 int getVin(void)
 {
 	char cat[128] = "";
@@ -171,20 +507,7 @@ int getVin(void)
 			break;		
 	}
 	writeCmd("at st 32\r");
-/*	for(u8 work = 0,ret = 0; work < request_cycle; work++)
-	{
-		ret = readCmd((u8*)cat,&data_len,300);
-		if(ret == 2)		//ÊÕµ½ERROR»òÕßNODATA
-			return 0;
-		else if(ret==0)	//Ã»ÓĞÊÕµ½Êı¾İ
-			continue;
-		else						//ÊÕµ½Êı¾İ
-		{
-			if(data_len<9)
-				continue;
-		}			
-	}
-*/
+
 	//Êı¾İ½âÎö
 	u8 ret = 1;		
 	if (getSpaceNum(cat) >= 21) 
@@ -215,7 +538,7 @@ int getVin(void)
 					hex[1] = Index[2][5+(i-14)*3];			
 				}
 				vin[i] = charhextoascii(hex);
-				/*ÅĞ¶Ï×Ö·ûºÏ·¨ĞÔ*/
+				//ÅĞ¶Ï×Ö·ûºÏ·¨ĞÔ
 				if(!checkASCIIRange(vin[i]))
 				{
 					ret = 0;
@@ -246,11 +569,35 @@ int getVin(void)
 	}
 	return 1;
 }
+*/
 
 /*
 	»ñÈ¡³µÁ¾ËÙ¶È
 */
 int getVss(void) 
+{
+	char cat[64] = "";
+	u32 sub = 0;	
+	
+	memcpy(cat,dataCache,Rx_len2);
+	if(getSpaceNum(cat)>=7) //ÅĞ¶Ï¿Õ¸ñÊıÁ¿
+	{
+		u32 a = htoi(cat[6]);
+		u32 b = htoi(cat[7]);
+		sub = (a<<4) + b;		
+	}
+
+	if(sub && sub <=251)
+	{
+		Vss_T.Data[0] = sub;
+	}
+	SendFlag = 1;
+
+	return sub;
+}
+
+/*
+int getVss(void)
 {
 	char cat[64] = "";
 	u8 data_len = 0, work = 0;
@@ -278,20 +625,6 @@ int getVss(void)
 			break;		
 	}
 	
-/*	for(u8 work = 0,ret = 0; work < request_cycle; work++)
-	{
-		ret = readCmd((u8*)cat,&data_len,300);	
-		if(ret == 2)		//ÊÕµ½"ERROR"»òÕß"NODATA"
-			return 0;
-		else if(ret==0)	//Ã»ÓĞÊÕµ½Êı¾İ
-			continue;
-		else						//ÊÕµ½Êı¾İ
-		{
-			if(data_len<9)
-				continue;
-		}		
-	}
-*/	
 	u32 sub = 0;
 	
 	if(getSpaceNum(cat)>=7) //ÅĞ¶Ï¿Õ¸ñÊıÁ¿
@@ -316,6 +649,7 @@ int getVss(void)
 
 	return sub;
 }
+*/
 
 /*
 	»ñÈ¡·¢¶¯»ú×ªËÙ
@@ -323,7 +657,44 @@ int getVss(void)
 int getRpm(void)
 {
 	char cat[64] = "";
+	u32 sub = 0;		
+
+	memcpy(cat,dataCache,Rx_len2);	
+	if(getSpaceNum(cat)>=7)//ÅĞ¶Ï¿Õ¸ñÊıÁ¿
+	{
+		u32 a = htoi(cat[9]);
+		u32 b = htoi(cat[10]);
+		u32 c = htoi(cat[12]);
+		u32 d = htoi(cat[13]);
+		sub = ((c<<12) + (d<<8) + (a<<4) + b) >> 3 ;
+	}
+
+	if(sub && sub <= 8032)
+	{
+		Rpm_T.Data[0] = sub >> 8;
+		Rpm_T.Data[1] = sub ;
+	}
+
+	if(sub > 0){//×ªËÙ²»Îª0
+		isStartUp = 1;		//ĞŞ¸Ä·¢¶¯»ú×´Ì¬Îªµã»ğ
+	}
+	else if(sub <= 0 && !SyncFlag){//×ªËÙÎª0,·ÇÍ¬²½×´Ì¬,ÇÒ·¢¶¯»ú×´Ì¬Îªµã»ğ
+		if(isStartUp == 1){
+			sleepCounter = RTC_ReadTimeCounter(&hrtc);
+		}
+		isStartUp = 0;		//ĞŞ¸Ä·¢¶¯»ú×´Ì¬ÎªÏ¨»ğ
+		Sleep_Manage();
+	}
+	SendFlag = 1;
+
+	return sub;
+}
+/*
+int getRpm(void)
+{
+	char cat[64] = "";
 	u8 data_len = 0, work = 0;
+	static u8 i = 0;
 	
 	memset(&Rpm_T,0,sizeof(OBD_T));	
 	
@@ -392,10 +763,39 @@ int getRpm(void)
 	
 	return sub;
 }
+*/
 
 /*
 	»ñÈ¡·¢¶¯»úÊ±¼ä
 */
+int getEngineHours(void) 
+{
+	char cat[64] = "";
+	u32 sub = 0;
+
+	memcpy(cat,dataCache,Rx_len2);
+	if(getSpaceNum(cat)>=7)//ÅĞ¶Ï¿Õ¸ñÊıÁ¿
+	{
+		u32 a = charhextoascii(cat);
+		u32 b = charhextoascii(cat+3);
+		u32 c = charhextoascii(cat+6);
+		u32 d = charhextoascii(cat+9);
+		sub = (a +(b<<8) + (c<<16) + (d<<24)) / 20;//ÒıÇæÊ±¼ä
+	}
+	
+	if(sub && sub<210554061)
+	{
+		EngineHours_T.Data[0] = (sub >> 24);
+		EngineHours_T.Data[1] = (sub >> 16);
+		EngineHours_T.Data[2] = (sub >> 8);
+		EngineHours_T.Data[3] = sub;
+	}
+	SendFlag = 1;
+
+	return sub;
+
+}
+/*
 int getEngineHours(void) 
 {
 	char cat[64] = "";
@@ -457,10 +857,50 @@ int getEngineHours(void)
 	
 	return sub;
 }
-
+*/
 /*
 	»ñÈ¡Àï³ÌÊı
 */
+int getMiles(void)
+{
+	char cat[100] = "";
+	u32 sub0 = 0,sub1 = 0;
+
+	memcpy(cat,dataCache,Rx_len2);
+	if(getSpaceNum(cat)>=7)//¼ÆËã¿Õ¸ñÊıÁ¿
+	{
+		u32 a = charhextoascii(cat);
+		u32 b = charhextoascii(cat+3);
+		u32 c = charhextoascii(cat+6);
+		u32 d = charhextoascii(cat+9);
+		u32 e = charhextoascii(cat+12);
+		u32 f = charhextoascii(cat+15);
+		u32 g = charhextoascii(cat+18);
+		u32 h = charhextoascii(cat+21);
+		sub1 = (a +(b<<8) + (c<<16) + (d<<24)) >> 3;//¶ÌÀï³Ì
+		sub0 = (e +(f<<8) + (g<<16) + (h<<24)) >> 3;//×ÜÀï³Ì		
+	}
+
+	if(sub1 && sub1<526385152)
+	{
+		Miles_T.Data[0] = (sub1 >> 24);
+		Miles_T.Data[1] = (sub1 >> 16);
+		Miles_T.Data[2] = (sub1 >> 8);
+		Miles_T.Data[3] = sub1;
+	}
+	
+	if(sub0 && sub0<526385152)
+	{
+		TotalMiles_T.Data[0] = (sub0 >> 24);
+		TotalMiles_T.Data[1] = (sub0 >> 16);
+		TotalMiles_T.Data[2] = (sub0 >> 8);
+		TotalMiles_T.Data[3] = sub0;
+	}
+	SendFlag = 1;
+	
+	return sub1;
+}
+/*
 int getMiles(void)
 {
 	char cat[100] = "";
@@ -547,7 +987,7 @@ int getMiles(void)
 
 	return sub1;
 }
-
+*/
 /*×ÔÊÊÓ¦²¨ÌØÂÊ*/
 int autoBaudRate(void)
 {
@@ -640,7 +1080,7 @@ int setsetBaudRate(int deep)
 	return ret;
 }	
 
-/*²âÊÔµ±Ç°²¨ÌØÂÊÏÂÊÇ·ñÓĞÊı¾İ´«Êä*/
+/*²âÊÔµ±Ç°²¨ÌØÂÊÊÇ·ñÕıÈ·*/
 int baudTest(void)
 {
 	char cat[64] ="";
@@ -648,6 +1088,7 @@ int baudTest(void)
 
 	//³¢ÊÔ·¢ËÍÊı¾İ
 	writeCmd("FEF1\r");
+//	HAL_Delay(20);	
 	//Ñ­»·³¬Ê±µÈ´ı½ÓÊÕ
 	while(work++ < request_cycle)
 	{
@@ -682,6 +1123,8 @@ int setBroadcastMode(bool mode1)
 		sprintf(cmd, "at intrude 1\r");
 
 	writeCmd(cmd);
+//	HAL_Delay(20);
+	
 	while(work++ < request_cycle)
 	{
 		//ÊÕµ½ÁËÊı¾İ
@@ -808,22 +1251,10 @@ int protHandler(u8* recvCmd,u8 len)
 u8 writeCmd(char *cmd)
 {
 	u8 ret = 0;
-
-	/*  Çå³ıÖĞ¶Ï±êÖ¾ */
-	__HAL_UART_CLEAR_IDLEFLAG(&huart2);
-	/* Í£Ö¹DMA½ÓÊÕ */
-	HAL_UART_DMAStop(&huart2);
-	/*	Çå¿Õ½ÓÊÕ»º´æÇø	*/
-	memset(ReceiveBuff2,0,sizeof(ReceiveBuff2));	
-	/*	½ÓÊÕÊı¾İ³¤¶ÈÇåÁã	*/
-	Rx_len2=0;
-	recv_end_flag2=0;
-	/*	¿ªÆôÏÂÒ»´Î½ÓÊÕ	*/
-	HAL_UART_Receive_DMA(&huart2,(u8*)ReceiveBuff2,UARTSIZE);
 	
-	//·¢ËÍÖ¸Áî
+	HAL_Delay(20);
 	ret = HAL_UART_Transmit(&huart2 , (u8*)cmd, strlen(cmd), 0xFFFF);
-	
+
 	return ret;
 }
 
@@ -839,16 +1270,11 @@ u8 readCmd(u8* Data,u8* data_len,u32 timeout)
 		if(recv_end_flag2)//½ÓÊÕµ½Êı¾İ
 		{	
 			{
-				memcpy(Data, ReceiveBuff2, Rx_len2); //¿½±´´®¿Ú½ÓÊÕµ½µÄÊı¾İ
+				memcpy(Data, dataCache, Rx_len2); //¿½±´´®¿Ú½ÓÊÕµ½µÄÊı¾İ
 				*data_len = Rx_len2;               //¼ÇÂ¼Êı¾İ³¤¶È
 			}
-			/*	Çå¿Õ½ÓÊÕ»º´æÇø	*/
-			memset(ReceiveBuff2,0,sizeof(ReceiveBuff2));
 			/*	½ÓÊÕÊı¾İ³¤¶ÈÇåÁã	*/
 			Rx_len2=0;
-			recv_end_flag2=0;
-			/*	¿ªÆôÏÂÒ»´Î½ÓÊÕ	*/
-			HAL_UART_Receive_DMA(&huart2,(uint8_t*)ReceiveBuff2,UARTSIZE);
 			return 1;	
 		}			
 	}
@@ -1168,7 +1594,7 @@ void sync_SendData(u8 mbuf[][32])
 	{				
 		memcpy(tmpbuf,mbuf[i],26);	//¿½±´ÀúÊ·Êı¾İ
 		HAL_UART_Transmit(&huart3,tmpbuf,26,0xFFFF);
-		HAL_Delay(10);
+		HAL_Delay(1);
 	}
 }
 
