@@ -1041,48 +1041,11 @@ int setsetBaudRate(int deep)
 	else
 		return 0;
 
-	work = data_len = ret = 0;
 	writeCmd("at ppp\r");		//保存寄存器设置
-	while(work++ < request_cycle)
-	{
-		//收到数据
-		memset(cat,0,sizeof(cat));
-		if(readCmd((u8*)cat,&data_len,200))
-		{
-			if(strstr(cat,"OK"))
-			{	
-				ret = 1;
-				break;
-			}
-		}
-		//没有收到数据
-		else 
-			continue;		
-	}
-	HAL_IWDG_Refresh(&hiwdg);//复位看门狗
-	if(!ret){
-		return ret;
-	}
-	
-	work = data_len = ret = 0;
+	HAL_Delay(20);
 	writeCmd("atz\r");	//复位命令，使寄存器生效
-	while(work++ < request_cycle)
-	{
-		//收到数据
-		memset(cat,0,sizeof(cat));
-		if(readCmd((u8*)cat,&data_len,400))
-		{
-			if(strstr(cat,"DFL168"))
-			{
-				ret = 1;
-				break;
-			}
-		}
-		//没有收到数据
-		else 
-			continue;		
-	}
-	HAL_IWDG_Refresh(&hiwdg);//复位看门狗
+	HAL_Delay(50);
+
 	return ret;
 }	
 
@@ -1095,7 +1058,6 @@ int baudTest(void)
 	//尝试发送数据
 	Rx_len2 = recv_end_flag2 = 0;
 	writeCmd("FEF1\r");
-	HAL_Delay(20);	
 	//循环超时等待接收
 	while(work++ < request_cycle)
 	{
@@ -1281,7 +1243,7 @@ u8 readCmd(u8* Data,u8* data_len,u32 timeout)
 				*data_len = Rx_len2;               //记录数据长度
 			}
 			/*	接收数据长度清零	*/
-			Rx_len2=0;
+			recv_end_flag2 = Rx_len2=0;
 			return 1;	
 		}			
 	}
