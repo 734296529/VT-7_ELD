@@ -73,7 +73,7 @@ void LED_Manage(void)
 char charhextoascii(char *hex_byte){
 	int a = (hex_byte[0] - '0' <= 9) ? (hex_byte[0] - '0') : (hex_byte[0] - 55);
 	int b = (hex_byte[1] - '0' <= 9) ? (hex_byte[1] - '0') : (hex_byte[1] - 55);
-	return (char) (16 * a + b);
+	return (char) ((a<<4) + b);
 }
 
 //16进制字符串转整形(单字符)

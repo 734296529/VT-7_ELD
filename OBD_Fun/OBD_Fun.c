@@ -33,11 +33,13 @@ int DFL168_Init(void)
 	static u8 i = 1;
 	if(i)
 	{
+		i = 0;
 		writeCmd("AT SP A\r");//选择1939协议
 		HAL_Delay(20);
 		printf("autoBaudRate=%d\r\n",autoBaudRate());
+		HAL_Delay(20);	
+		writeCmd("at h1\r");
 		HAL_Delay(20);
-		i = 0;
 	}	
 	writeCmd("AT SLEEP PIN 1\r");
 	HAL_Delay(20);	
@@ -419,45 +421,44 @@ int getVin(void)
 	char cat[128] = "";
 	char vin[18] = "";
 	u8 ret = 1;		
+	char* Index[3]  = {0};
+	u8 i = 0;	
+	char hex[2] = {0};	
 	
 	memcpy(cat,dataCache,Rx_len2);	
-	if (getSpaceNum(cat) >= 21) 
+
+	Index[0] = strstr(cat, " 00 01 ");
+	Index[1] = strstr(cat, " 00 02 ");
+	Index[2] = strstr(cat, " 00 03 ");
+	
+	if(Index[0] && Index[1] && Index[2])
 	{
-		char* Index[3]  = {0};
-		int i = 0;	
-		char hex[2] = {0};
-		Index[0] = strstr(cat, "01: ");
-		Index[1] = strstr(cat, "02: ");
-		Index[2] = strstr(cat, "03: ");
-		if(Index[0] && Index[1] && Index[2])
+		for(i = 0 ; i < 17; i++)
 		{
-			for(i = 0 ; i < 17; i++)
+			if(i < 7)
 			{
-				if(i < 7)
-				{
-					hex[0] = Index[0][4+i*3];
-					hex[1] = Index[0][5+i*3];
-				}
-				else if(i < 14)
-				{
-					hex[0] = Index[1][4+(i-7)*3];
-					hex[1] = Index[1][5+(i-7)*3];
-				}
-				else
-				{
-					hex[0] = Index[2][4+(i-14)*3];
-					hex[1] = Index[2][5+(i-14)*3];			
-				}
-				vin[i] = charhextoascii(hex);
-				//判断字符合法性
-				if(!checkASCIIRange(vin[i]))
-				{
-					ret = 0;
-					break;
-				}
+				hex[0] = Index[0][7+i*3];
+				hex[1] = Index[0][8+i*3];
 			}
-			
+			else if(i < 14)
+			{
+				hex[0] = Index[1][7+(i-7)*3];
+				hex[1] = Index[1][8+(i-7)*3];
+			}
+			else
+			{
+				hex[0] = Index[2][7+(i-14)*3];
+				hex[1] = Index[2][8+(i-14)*3];			
+			}
+			vin[i] = charhextoascii(hex);
+			//判断字符合法性
+			if(!checkASCIIRange(vin[i]))
+			{
+				ret = 0;
+				break;
+			}
 		}
+		
 	}
 
 	if(ret)
@@ -578,13 +579,13 @@ int getVss(void)
 {
 	char cat[64] = "";
 	u32 sub = 0;	
+	char *targetIndex = NULL;
 	
 	memcpy(cat,dataCache,Rx_len2);
-	if(getSpaceNum(cat)>=7) //判断空格数量
+	targetIndex = strstr(cat,"EF1 ");
+	if(targetIndex)
 	{
-		u32 a = htoi(cat[6]);
-		u32 b = htoi(cat[7]);
-		sub = (a<<4) + b;		
+		sub = charhextoascii(targetIndex+13);		
 	}
 
 	if(sub && sub <=251)
@@ -657,24 +658,18 @@ int getVss(void)
 int getRpm(void)
 {
 	char cat[64] = "";
-	u32 sub = 0;		
+	u32 sub = 0;
+	char *targetIndex = NULL;
 
-	memcpy(cat,dataCache,Rx_len2);	
-	if(getSpaceNum(cat)>=7)//判断空格数量
+	memcpy(cat,dataCache,Rx_len2);
+	targetIndex = strstr(cat,"004 ");
+	if(targetIndex)
 	{
-		u32 a = htoi(cat[9]);
-		u32 b = htoi(cat[10]);
-		u32 c = htoi(cat[12]);
-		u32 d = htoi(cat[13]);
-		sub = ((c<<12) + (d<<8) + (a<<4) + b) >> 3 ;
+		u32 a = charhextoascii(targetIndex + 16);
+		u32 b = charhextoascii(targetIndex + 19);
+		sub = ((b<<8) + a) >> 3 ;
 	}
-
-	if(sub && sub <= 8032)
-	{
-		Rpm_T.Data[0] = sub >> 8;
-		Rpm_T.Data[1] = sub ;
-	}
-
+	
 	if(sub > 0){//转速不为0
 		isStartUp = 1;		//修改发动机状态为点火
 	}
@@ -685,6 +680,13 @@ int getRpm(void)
 		isStartUp = 0;		//修改发动机状态为熄火
 		Sleep_Manage();
 	}
+
+	if(sub && sub <= 8032)
+	{
+		Rpm_T.Data[0] = sub >> 8;
+		Rpm_T.Data[1] = sub ;
+	}
+
 	SendFlag = 1;
 
 	return sub;
@@ -772,14 +774,16 @@ int getEngineHours(void)
 {
 	char cat[64] = "";
 	u32 sub = 0;
+	char *targetIndex = NULL;
 
 	memcpy(cat,dataCache,Rx_len2);
-	if(getSpaceNum(cat)>=7)//判断空格数量
+	targetIndex = strstr(cat,"EE5 ");
+	if(targetIndex)
 	{
-		u32 a = charhextoascii(cat);
-		u32 b = charhextoascii(cat+3);
-		u32 c = charhextoascii(cat+6);
-		u32 d = charhextoascii(cat+9);
+		u32 a = charhextoascii(targetIndex + 7);
+		u32 b = charhextoascii(targetIndex + 10);
+		u32 c = charhextoascii(targetIndex + 13);
+		u32 d = charhextoascii(targetIndex + 16);
 		sub = (a +(b<<8) + (c<<16) + (d<<24)) / 20;//引擎时间
 	}
 	
@@ -865,18 +869,20 @@ int getMiles(void)
 {
 	char cat[100] = "";
 	u32 sub0 = 0,sub1 = 0;
+	char *targetIndex = NULL;
 
 	memcpy(cat,dataCache,Rx_len2);
-	if(getSpaceNum(cat)>=7)//计算空格数量
+	targetIndex = strstr(cat,"EE0 ");
+	if(targetIndex)//计算空格数量
 	{
-		u32 a = charhextoascii(cat);
-		u32 b = charhextoascii(cat+3);
-		u32 c = charhextoascii(cat+6);
-		u32 d = charhextoascii(cat+9);
-		u32 e = charhextoascii(cat+12);
-		u32 f = charhextoascii(cat+15);
-		u32 g = charhextoascii(cat+18);
-		u32 h = charhextoascii(cat+21);
+		u32 a = charhextoascii(targetIndex + 7);
+		u32 b = charhextoascii(targetIndex + 10);
+		u32 c = charhextoascii(targetIndex + 13);
+		u32 d = charhextoascii(targetIndex + 16);
+		u32 e = charhextoascii(targetIndex + 19);
+		u32 f = charhextoascii(targetIndex + 22);
+		u32 g = charhextoascii(targetIndex + 25);
+		u32 h = charhextoascii(targetIndex + 28);
 		sub1 = (a +(b<<8) + (c<<16) + (d<<24)) >> 3;//短里程
 		sub0 = (e +(f<<8) + (g<<16) + (h<<24)) >> 3;//总里程		
 	}
@@ -1021,15 +1027,15 @@ int setsetBaudRate(int deep)
 	if(deep == 250)				
 	{
 		writeCmd("at pp 32 off\r");
-		HAL_Delay(25);
+		HAL_Delay(20);
 	} 
 	//500K波特率
 	else if(deep == 500)	
 	{
 		writeCmd("at pp 32 sv 01\r");
-		HAL_Delay(25);
+		HAL_Delay(20);
 		writeCmd("at pp 32 on\r");
-		HAL_Delay(25);
+		HAL_Delay(20);
 	} 
 	//不支持其他波特率
 	else
@@ -1087,8 +1093,9 @@ int baudTest(void)
 	u8 work = 0, data_len = 0, ret = 0;
 
 	//尝试发送数据
+	Rx_len2 = recv_end_flag2 = 0;
 	writeCmd("FEF1\r");
-//	HAL_Delay(20);	
+	HAL_Delay(20);	
 	//循环超时等待接收
 	while(work++ < request_cycle)
 	{
@@ -1490,7 +1497,7 @@ int setSyncRange(u16 mStart,u16 mEnd)
 		return 0;
 	}
 	
-	SyncAddrStart = (BackupAddr >= mStart*15*backup_l) ? (BackupAddr - mStart*15*backup_l) : (FLASH_ADDR(8190,0) - (mStart*15*backup_l - BackupAddr));
+	SyncAddrStart = (BackupAddr >= mStart*15/2*backup_l) ? (BackupAddr - mStart*15/2*backup_l) : (FLASH_ADDR(8190,0) - (mStart*15/2*backup_l - BackupAddr));
 	SyncAddrEnd   = BackupAddr;
 	SyncAddrNow   = SyncAddrStart;
 	
@@ -1512,13 +1519,13 @@ int setSyncRange(u16 mStart,u16 mEnd)
 		{
 			if((low+1) == high)
 			{
-				SyncAddrStart = (BackupAddr >= high*15*backup_l) ? (BackupAddr - high*15*backup_l) : (FLASH_ADDR(8190,0) - (high*15*backup_l - BackupAddr));
+				SyncAddrStart = (BackupAddr >= high*15/2*backup_l) ? (BackupAddr - high*15/2*backup_l) : (FLASH_ADDR(8190,0) - (high*15/2*backup_l - BackupAddr));
 				SyncAddrNow = SyncAddrStart;
 				SyncFlag = 1;
 				return 1;
 			}
 			mid=(low+high)/2;
-			SyncAddrStart = (BackupAddr >= mid*15*backup_l) ? (BackupAddr - mid*15*backup_l) : (FLASH_ADDR(8190,0) - (mid*15*backup_l - BackupAddr));
+			SyncAddrStart = (BackupAddr >= mid*15/2*backup_l) ? (BackupAddr - mid*15/2*backup_l) : (FLASH_ADDR(8190,0) - (mid*15/2*backup_l - BackupAddr));
 			W25QXX_Read(&tmpbuf, SyncAddrStart, 1);
 			if(tmpbuf == 0x55)
 			{
