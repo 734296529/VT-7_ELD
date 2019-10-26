@@ -36,6 +36,7 @@ int protHandler(u8* recvCmd,u8 len);
 u8 writeCmd(char* cmd);
 u8 readCmd(u8* Data,u8* data_len,u32 timeout);
 int mcuReply(u16 cmdCode,u8 replyFlag);
+int versionReply(void);
 int setSleepDelay(u8 slpDly);
 int backup_Handler(u8 i);
 int backup_2Flash(void);

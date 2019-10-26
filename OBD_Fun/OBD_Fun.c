@@ -1020,8 +1020,7 @@ int autoBaudRate(void)
 /*设置波特率*/
 int setsetBaudRate(int deep)
 {
-	char cat[64] = "";
-	u8 work = 0, data_len = 0, ret = 0;
+	u8 ret = 0;
 	
 	//250K波特率
 	if(deep == 250)				
@@ -1189,12 +1188,12 @@ int protHandler(u8* recvCmd,u8 len)
 			break;
 		case 0X6001://查询单片机版本
 		{
-			mcuReply(0x7002,MCU_Version);
+			versionReply();
 		}
 			break;
 		case 0X6002:
 		{//查询休眠延迟时间
-			mcuReply(0x7003,sleepDelay/60);
+			mcuReply(0x6002,sleepDelay/60);
 		}
 			break;
 		case 0X7001://上位机应答
@@ -1266,6 +1265,24 @@ int mcuReply(u16 cmdCode,u8 replyFlag)
 	HAL_UART_Transmit(&huart3,ReplyBuff,8,0xffff);
 	return 1;
 }
+
+/* 版本号应答 */
+int versionReply(void)
+{
+	u8 ReplyBuff[32] = {0};
+	ReplyBuff[0] = 0X55;
+	ReplyBuff[1] = 0XFA;
+	ReplyBuff[2] = 0X02 + strlen(MCU_Version);
+	ReplyBuff[3] = 0x60;
+	ReplyBuff[4] = 0x01;
+	memcpy(ReplyBuff+5,MCU_Version,strlen(MCU_Version));	
+	ReplyBuff[5+strlen(MCU_Version)] = getCRC8(ReplyBuff+3,ReplyBuff[2]);
+	ReplyBuff[6+strlen(MCU_Version)] = 0XEE;
+	
+	HAL_UART_Transmit(&huart3,ReplyBuff,strlen(MCU_Version)+7,0xffff);
+	return 1;
+}
+
 
 /* 设置熄火休眠延时 */
 int setSleepDelay(u8 slpDly)

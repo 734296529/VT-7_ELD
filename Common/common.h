@@ -15,7 +15,7 @@ typedef volatile unsigned short int vu16;
 typedef volatile unsigned int vu32;
 typedef volatile unsigned long long vu64;
 
-#define MCU_Version	0X06//单片机版本号
+#define MCU_Version	"V1.0.6-J"//单片机版本号
 /* 串口可接收最大字符个数 */
 #define UARTSIZE 		255
 #define PAGE_SIZE		0x100
