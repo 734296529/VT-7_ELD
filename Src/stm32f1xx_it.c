@@ -337,37 +337,6 @@ void USART1_IRQHandler(void)
   /* USER CODE END USART1_IRQn 0 */
   HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
-//	
-//	uint32_t temp;
-//	/* 如果是串口2中断 */
-//	if(USART1 == huart1.Instance)
-//	{	/* 如果是串口2IDLE中断 */
-//		if(__HAL_UART_GET_FLAG(&huart1,UART_FLAG_IDLE) != RESET)
-//		{
-//			/*  清除中断标志 */
-//			__HAL_UART_CLEAR_IDLEFLAG(&huart1);
-//			/* 停止DMA接收 */
-//			HAL_UART_DMAStop(&huart1);
-//			/* 获取DMA当前还有多少未填充 */
-//			temp = __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);
-//			/* 计算串口接收到的数据个数 */
-//			Rx_len =  UARTSIZE - temp;
-//			recv_end_flag = 1;
-//		}
-//	}
-
-//	if(recv_end_flag)
-//	{
-//		/*	发送接收到的数据到串口2	*/
-//		HAL_UART_Transmit(&huart2, ReceiveBuff, Rx_len, 0xFFFF);
-////		printf("Uart1 recv%d:%s",Rx_len,ReceiveBuff);
-//		/*	清空接收缓存区	*/
-//		memset(ReceiveBuff,0,sizeof(ReceiveBuff));
-//		/*	接收数据长度清零	*/
-//		Rx_len=0;
-//		recv_end_flag=0;
-//	}
-//	HAL_UART_Receive_DMA(&huart1,(uint8_t*)ReceiveBuff,UARTSIZE);
 
   /* USER CODE END USART1_IRQn 1 */
 }

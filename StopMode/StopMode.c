@@ -36,7 +36,7 @@ void Enter_StopMode(void)
 		HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
 		
 		HAL_IWDG_Refresh(&hiwdg);//复位看门狗
-		printf("\r\n");
+		HAL_Delay(5);
 	}
 	//睡眠模式下，自动切换内部时钟，退出低功耗模式后，需要重新配置时钟频率
 	SystemClock_Config();

@@ -12,8 +12,8 @@ typedef struct obd_t
 
 int DFL168_Init(void);
 
-void OBD_funStart(void);
-void OBD_funStop(void);
+void ELD_funStart(void);
+void ELD_funStop(void);
 
 void J1939_Handler(void);
 void sendPGN(void);
@@ -27,6 +27,9 @@ int getVss(void);
 int getRpm(void);
 int getEngineHours(void);
 int getMiles(void);
+int getHighResMiles(void);
+int getDTCs(void);
+int clearDTCs(void);
 int autoBaudRate(void);
 int setsetBaudRate(int deep);
 int baudTest(void);
@@ -43,5 +46,6 @@ int backup_2Flash(void);
 int setSyncRange(u16 mStart,u16 mEnd);
 void sync_Handler(void);
 void sync_SendData(u8 mBuf[][32]);
-
+void CMD_Handler(void);
+void CMD_Pass(u8 *buf);
 #endif

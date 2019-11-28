@@ -29,6 +29,7 @@ volatile u8 SyncFlag = 0;					//数据同步标志位
 volatile u8 StoreFlag = 0;				//数据写入标志位
 volatile u8 SendFlag = 0;					//发送数据标志位
 volatile u8 ELD_Rdy = 0;					//初始化完成标志
+volatile u8 CMD_Flag = 0;					//命令行标志位
 volatile u8 recv_OK = 0;					//上位机应答标志
 u8 ProtRecvBuff[150]={0};					//上位机指令缓存
 volatile u8 ProtRecvLen = 0;			//上位机指令长度
@@ -102,6 +103,20 @@ int checkASCIIRange(char s)
 	else
 		return 0;
 }
+
+//查找字符串中子串的数量
+int strstrcount(char *str1, char *str2)
+{
+	char *str = str1;
+	int count = 0;
+	while ((str = strstr(str, str2)) != NULL)
+	{
+		count++;
+		str++;
+	}
+	return count;
+}
+
 
 /* 检查Flash是否为第一次使用,并初始化部分数据*/
 u8 Flash_Check(void)

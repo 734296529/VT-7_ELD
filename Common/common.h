@@ -15,7 +15,7 @@ typedef volatile unsigned short int vu16;
 typedef volatile unsigned int vu32;
 typedef volatile unsigned long long vu64;
 
-#define MCU_Version	"V1.0.6-J"//单片机版本号
+#define MCU_Version	"V1.0.7-J"//单片机版本号
 /* 串口可接收最大字符个数 */
 #define UARTSIZE 		255
 #define PAGE_SIZE		0x100
@@ -50,7 +50,7 @@ extern volatile u8 SyncFlag;				//数据同步标志位
 extern volatile u8 StoreFlag;	 			//数据写入标志位
 extern volatile u8 SendFlag;				//发送数据标志位
 extern volatile u8 ELD_Rdy;					//初始化完成标志 
-
+extern volatile u8 CMD_Flag;				//命令行标志位
 extern volatile u8 recv_OK;					//上位机应答标志
 extern u8 ProtRecvBuff[150];				//上位机指令缓存
 extern volatile u8 ProtRecvLen;	  	//上位机指令长度
@@ -67,5 +67,6 @@ char charhextoascii(char *hex_byte);// 字符串16进制转ASCII码(2位)
 int htoi(char x); //16进制字符串转整形(单字符)
 int getSpaceNum(char *str); //计算字符串中空格数量
 int checkASCIIRange(char s);//判断字符的合法性
+int strstrcount(char *str1, char *str2);//查找字符串中子串的数量
 u8 Flash_Check(void);
 #endif 

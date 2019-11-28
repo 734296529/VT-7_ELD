@@ -101,6 +101,7 @@ int main(void)
 	isStopMode = OFF;
 	SyncFlag = 0;
 	ELD_Rdy = 0;
+	CMD_Flag = 0;
 	pgn_Flag = 0;
   /* USER CODE END 1 */
 
@@ -164,7 +165,6 @@ int main(void)
 	TIMERS_Add(0,500,1,LED_Manage);//LED指示灯管理
 	TIMERS_Start(0);
 	
-//	TIMERS2_Add(0,1,1,OBD_funStart);//ELD数据获取间隔
 	Delay_ms(5000);//等待DFL168上电启动
 	DFL168_Init();//DFL168初始化
 	
@@ -182,6 +182,10 @@ int main(void)
 		if(ELD_Rdy)
 		{
 			J1939_Handler();
+		}
+		else if(CMD_Flag)
+		{
+			CMD_Handler();
 		}
 		if(SyncFlag)
 		{

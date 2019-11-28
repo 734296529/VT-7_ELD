@@ -20,6 +20,7 @@ OBD_T Rpm_T = {0};
 OBD_T EngineHours_T = {0};
 OBD_T Miles_T = {0};
 OBD_T TotalMiles_T = {0};
+OBD_T HighResTotalMiles_T = {0};
 
 u8 Vin_P[64] = {0};
 u8 Vss_P[64] = {0};
@@ -27,6 +28,7 @@ u8 Rpm_P[64] = {0};
 u8 EngineHours_P[64] = {0};
 u8 Miles_P[64] = {0};
 u8 TotalMiles_P[64] = {0};
+u8 HighResTotalMiles_P[64] = {0};
 
 int DFL168_Init(void)
 {
@@ -46,18 +48,20 @@ int DFL168_Init(void)
 	writeCmd("AT SLEEP P 0\r");
 	HAL_Delay(20);
 
-	OBD_funStart();
+	ELD_funStart();
 	return 1;
 }
 
-void OBD_funStart(void)
+void ELD_funStart(void)
 {
 	SyncFlag = 0;
 	ELD_Rdy = 1;
+	CMD_Flag = 0;
 }
-void OBD_funStop(void)
+void ELD_funStop(void)
 {
 	ELD_Rdy = 0;
+	SyncFlag = 0;
 }
 
 void J1939_Handler(void)
@@ -88,54 +92,13 @@ void J1939_Handler(void)
 	}
 
 }
-/*
-void J1939_getData(void)
-{
-	u32 tmp = RTC_ReadTimeCounter(&hrtc);
-	static u8 i = 0;
-	if(tmp - TimeStamp > 1)
-	{
-		TimeStamp = tmp;
-		
-		getEngineHours();		
-		OBD_transData(EngineHours_P);	
-		HAL_Delay(20);	
-		
-		getVss();
-		OBD_transData(Vss_P);	
-		HAL_Delay(20);
-		
-		getRpm();
-		OBD_transData(Rpm_P);	
-		HAL_Delay(20);
-		
-		getMiles();
-		OBD_transData(Miles_P);
-		HAL_Delay(20);
-		
-		OBD_transData(TotalMiles_P);
-		HAL_Delay(10);
-
-		if(!Vin_ed)
-			getVin();	
-		OBD_transData(Vin_P);	
-		HAL_Delay(20);
-		
-		backup_Handler(i++);
-		if(i>=4){
-			i = 0;
-		}
-		HAL_IWDG_Refresh(&hiwdg);//复位看门狗
-	}
-}
-*/
 
 void sendPGN(void)
 {
 	static u8 i = 0;
 	u32 tmp = 0;
 
-	if(i>4)
+	if(i>6)
 		i = 0;
 
 	switch(i)
@@ -154,6 +117,7 @@ void sendPGN(void)
 			writeCmd("at st 4b\r");
 			//发送请求
 			memset(&Rpm_T,0,sizeof(OBD_T));	
+			recv_end_flag2 = 0;
 			writeCmd("F004\r");
 			delayStart = HAL_GetTick();
 			delayCounter = 310;
@@ -188,7 +152,8 @@ void sendPGN(void)
 			writeCmd("at st 4b\r");	
 			//发送请求
 			memset(&Miles_T,0,sizeof(OBD_T));
-			memset(&TotalMiles_T,0,sizeof(OBD_T));	
+			memset(&TotalMiles_T,0,sizeof(OBD_T));
+			recv_end_flag2 = 0;
 			writeCmd("FEE0\r");
 			delayStart = HAL_GetTick();
 			delayCounter = 310;
@@ -212,6 +177,7 @@ void sendPGN(void)
 			writeCmd("at st 4b\r");
 			//发送请求
 			memset(&Vin_T,0,sizeof(OBD_T));	
+			recv_end_flag2 = 0;
 			writeCmd("FEEC\r");
 			delayStart = HAL_GetTick();
 			delayCounter = 1010;
@@ -226,10 +192,9 @@ void sendPGN(void)
 			setBroadcastMode(0);
 			//设置超时时间300ms
 			writeCmd("at st 4b\r");
-			//设置请求模式
-			//setBroadcastMode(0);
 			//发送请求
 			memset(&EngineHours_T,0,sizeof(OBD_T));	
+			recv_end_flag2 = 0;
 			writeCmd("FEE5\r");
 			delayStart = HAL_GetTick();
 			delayCounter = 310;
@@ -237,7 +202,39 @@ void sendPGN(void)
 			i++;
 		}
 			break;
-		
+
+		case 5://高精度里程数
+		{
+			//设置广播模式
+			setBroadcastMode(1);
+			//设置超时时间1s
+			writeCmd("at st fa\r");
+			//发送请求
+			memset(&HighResTotalMiles_T,0,sizeof(OBD_T));	
+			recv_end_flag2 = 0;
+			writeCmd("FEC1\r");
+			delayStart = HAL_GetTick();
+			delayCounter = 1010;
+			pgn_Flag = 0xfec1;
+			i++;
+		}		
+			break;
+		case 6://DTCs故障码
+		{
+			//设置广播模式
+			setBroadcastMode(1);
+			//设置超时时间1s
+			writeCmd("at st fa\r");
+			//发送请求
+			recv_end_flag2 = 0;
+			writeCmd("FECA\r");
+			delayStart = HAL_GetTick();
+			delayCounter = 1020;
+			pgn_Flag = 0xfeca;
+			i++;
+		}
+			break;
+			
 		default:
 			i = 0;
 			break;
@@ -280,7 +277,17 @@ void recvPGN(void)
 		case 0xfeec:
 			getVin();
 			break;
+	
+		//故障码
+		case 0xfeca:
+			getDTCs();
+			break;
 
+		//高精度里程数
+		case 0xfec1:
+			getHighResMiles();
+			break;	
+		
 		default:
 			break;
 	}
@@ -368,12 +375,28 @@ void sendData(void)
 			ELD_TtoP(EngineHours_T,EngineHours_P);
 			ELD_transData(EngineHours_P);
 			//备份数据
+		}
+			break;
+			
+		//getHighResMiles高精度总里程
+		case 0xfec1:
+		{
+			HighResTotalMiles_T.Data[5] = (TimeStamp >> 24);
+			HighResTotalMiles_T.Data[6] = (TimeStamp >> 16);
+			HighResTotalMiles_T.Data[7] = (TimeStamp >> 8);
+			HighResTotalMiles_T.Data[8] = TimeStamp;
+			HighResTotalMiles_T.length = 9;
+			HighResTotalMiles_T.type = 0X08 ;
+			
+			ELD_TtoP(HighResTotalMiles_T,HighResTotalMiles_P);
+			ELD_transData(HighResTotalMiles_P);
+			//备份数据
 			backup_Handler(i++);
 			if(i>=4)
 				i = 0;
 		}
 			break;
-
+			
 		default:
 			break;
 	}
@@ -475,102 +498,6 @@ int getVin(void)
 	
 	return 1;
 }
-/*
-int getVin(void)
-{
-	char cat[128] = "";
-	char vin[18] = "";
-	u8 data_len = 0, work = 0;
-	
-	memset(&Vin_T,0,sizeof(OBD_T));	
-	
-	//设置模式
-	setBroadcastMode(0);
-	writeCmd("at st fa\r");
-	HAL_Delay(20);
-	//发送指令
-	writeCmd("feec\r");
-	
-	//循环超时等待接收
-	while(work++ < request_cycle)
-	{
-		HAL_IWDG_Refresh(&hiwdg);//复位看门狗
-		//收到数据
-		if(readCmd((u8*)cat,&data_len,1020))
-		{
-			if(data_len<9)
-				continue;
-			else
-				break;			
-		}
-		//没有收到数据
-		else 
-			break;		
-	}
-	writeCmd("at st 32\r");
-
-	//数据解析
-	u8 ret = 1;		
-	if (getSpaceNum(cat) >= 21) 
-	{
-		char* Index[3]  = {0};
-		int i = 0;	
-		char hex[2] = {0};
-		Index[0] = strstr(cat, "01: ");
-		Index[1] = strstr(cat, "02: ");
-		Index[2] = strstr(cat, "03: ");
-		if(Index[0] && Index[1] && Index[2])
-		{
-			for(i = 0 ; i < 17; i++)
-			{
-				if(i < 7)
-				{
-					hex[0] = Index[0][4+i*3];
-					hex[1] = Index[0][5+i*3];
-				}
-				else if(i < 14)
-				{
-					hex[0] = Index[1][4+(i-7)*3];
-					hex[1] = Index[1][5+(i-7)*3];
-				}
-				else
-				{
-					hex[0] = Index[2][4+(i-14)*3];
-					hex[1] = Index[2][5+(i-14)*3];			
-				}
-				vin[i] = charhextoascii(hex);
-				//判断字符合法性
-				if(!checkASCIIRange(vin[i]))
-				{
-					ret = 0;
-					break;
-				}
-			}
-			
-		}
-	}
-	
-	if(ret)
-	{
-		vin[17] = '\0';
-		memcpy(Vin_T.Data,vin,17);
-	}
-	
-	Vin_T.Data[17] = TimeStamp >> 24;
-	Vin_T.Data[18] = TimeStamp >> 16;
-	Vin_T.Data[19] = TimeStamp >> 8;
-	Vin_T.Data[20] = TimeStamp;
-	Vin_T.length = 21;
-	Vin_T.type = 0X01;
-	
-	OBD_TtoP(Vin_T,Vin_P);
-	if(vin[0]!=vin[1] || vin[0]!=vin[2] || vin[0]!=vin[3] || vin[0]!=vin[4])
-	{
-		Vin_ed = 1;
-	}
-	return 1;
-}
-*/
 
 /*
 	获取车辆速度
@@ -596,61 +523,6 @@ int getVss(void)
 
 	return sub;
 }
-
-/*
-int getVss(void)
-{
-	char cat[64] = "";
-	u8 data_len = 0, work = 0;
-	
-	memset(&Vss_T,0,sizeof(OBD_T));	
-	
-	//设置模式
-	setBroadcastMode(1);
-	//发送指令
-	writeCmd("FEF1\r");
-	
-	//循环超时等待接收
-	while(work++ < request_cycle)
-	{
-		//收到数据
-		if(readCmd((u8*)cat,&data_len,200))
-		{
-			if(data_len<9)
-				continue;
-			else
-				break;
-		}
-		//没有收到数据
-		else 
-			break;		
-	}
-	
-	u32 sub = 0;
-	
-	if(getSpaceNum(cat)>=7) //判断空格数量
-	{
-		u32 a = htoi(cat[6]);
-		u32 b = htoi(cat[7]);
-		sub = (a<<4) + b;		
-	}
-	
-	if(sub && sub <=251)
-	{
-		Vss_T.Data[0] = sub;
-	}
-	Vss_T.Data[1] = TimeStamp >> 24;
-	Vss_T.Data[2] = TimeStamp >> 16;
-	Vss_T.Data[3] = TimeStamp >> 8;
-	Vss_T.Data[4] = TimeStamp;
-	Vss_T.length = 5;
-	Vss_T.type = 0X03;
-
-	OBD_TtoP(Vss_T,Vss_P);
-
-	return sub;
-}
-*/
 
 /*
 	获取发动机转速
@@ -691,81 +563,6 @@ int getRpm(void)
 
 	return sub;
 }
-/*
-int getRpm(void)
-{
-	char cat[64] = "";
-	u8 data_len = 0, work = 0;
-	static u8 i = 0;
-	
-	memset(&Rpm_T,0,sizeof(OBD_T));	
-	
-	//设置模式
-	setBroadcastMode(1);
-	writeCmd("at st 4b\r");
-	HAL_Delay(20);
-	//发送指令
-	writeCmd("F004\r");
-	
-	//循环超时等待接收
-	while(work++ < request_cycle)
-	{
-		//收到数据
-		if(readCmd((u8*)cat,&data_len,300))
-		{
-			if(data_len<9)
-				continue;
-			else
-				break;
-		}
-		//没有收到数据
-		else 
-			break;		
-	}
-	writeCmd("at st 32\r");
-	
-	u32 sub = 0;	
-	if(getSpaceNum(cat)>=7)//判断空格数量
-	{
-		u32 a = htoi(cat[9]);
-		u32 b = htoi(cat[10]);
-		u32 c = htoi(cat[12]);
-		u32 d = htoi(cat[13]);
-//		sub = (c*16 + d)*32 + (a*16 + b)/8;
-		sub = ((c<<12) + (d<<8) + (a<<4) + b) >> 3 ;
-	}
-
-	if(sub && sub <= 8032)
-	{
-		Rpm_T.Data[0] = sub >> 8;
-		Rpm_T.Data[1] = sub ;
-	}
-//	else{ 
-//		Rpm_T.Data[0] = Rpm_P[5];
-//		Rpm_T.Data[1] = Rpm_P[6];
-//	}
-	Rpm_T.Data[2] = TimeStamp >> 24;
-	Rpm_T.Data[3] = TimeStamp >> 16;
-	Rpm_T.Data[4] = TimeStamp >> 8;
-	Rpm_T.Data[5] = TimeStamp;
-	Rpm_T.length = 6;
-	Rpm_T.type = 0X04;
-	
-	OBD_TtoP(Rpm_T,Rpm_P);
-	if(sub > 0){//转速不为0
-		isStartUp = 1;		//修改发动机状态为点火
-	}
-	else if(sub <= 0 && !SyncFlag){//转速为0,非同步状态,且发动机状态为点火
-		if(isStartUp == 1){
-			sleepCounter = RTC_ReadTimeCounter(&hrtc);
-		}
-		isStartUp = 0;		//修改发动机状态为熄火
-		Sleep_Manage();
-	}
-	
-	return sub;
-}
-*/
 
 /*
 	获取发动机时间
@@ -799,69 +596,7 @@ int getEngineHours(void)
 	return sub;
 
 }
-/*
-int getEngineHours(void) 
-{
-	char cat[64] = "";
-	u8 data_len = 0, work = 0;
-	
-	memset(&EngineHours_T,0,sizeof(OBD_T));
-	
-	//设置模式
-	setBroadcastMode(0);
 
-	//发送指令
-	writeCmd("FEE5\r");
-	
-	//循环超时等待接收
-	while(work++ < request_cycle)
-	{
-		//收到数据
-		if(readCmd((u8*)cat,&data_len,200))
-		{
-			if(data_len<9)
-				continue;
-			else
-				break;
-		}
-		//没有收到数据
-		else 
-			break;		
-	}
-
-	u32 sub = 0;
-	if(getSpaceNum(cat)>=7)//判断空格数量
-	{
-		u32 a = charhextoascii(cat);
-		u32 b = charhextoascii(cat+3);
-		u32 c = charhextoascii(cat+6);
-		u32 d = charhextoascii(cat+9);
-		sub = (a +(b<<8) + (c<<16) + (d<<24)) / 20;//引擎时间
-	}
-	
-	if(sub && sub<210554061){
-		EngineHours_T.Data[0] = (sub >> 24);
-		EngineHours_T.Data[1] = (sub >> 16);
-		EngineHours_T.Data[2] = (sub >> 8);
-		EngineHours_T.Data[3] = sub;
-	}
-//	EngineHours_T.Data[0] = 0;
-//	EngineHours_T.Data[1] = 0;
-//	EngineHours_T.Data[2] = 0;
-//	EngineHours_T.Data[3] = 0;
-
-	EngineHours_T.Data[4] = (TimeStamp >> 24);
-	EngineHours_T.Data[5] = (TimeStamp >> 16);
-	EngineHours_T.Data[6] = (TimeStamp >> 8);
-	EngineHours_T.Data[7] = TimeStamp;
-	EngineHours_T.length =  8;
-	EngineHours_T.type = 0X02 ;
-
-	OBD_TtoP(EngineHours_T,EngineHours_P);
-	
-	return sub;
-}
-*/
 /*
 	获取里程数
 */
@@ -906,94 +641,145 @@ int getMiles(void)
 	
 	return sub1;
 }
+
 /*
-int getMiles(void)
+	获取故障码
+*/
+int getDTCs(void)
+{
+	char cat[256] = "";
+	char tmp[256] = "";
+	int i = 0;
+	char pri[128] = "n=0";
+	int cnt = 0;
+	int spn = 0;
+	int fmi = 0;
+	int oc = 0;
+	int n = 0;
+	u8 a=0,b=0,c=0;
+	u8 b1=0, b3=0, b4=0, b5=0, b6=0;
+		
+	char *targetIndex = NULL;
+	char *targetIndex2 = NULL;
+	
+	pgn_Flag = 0x0;
+	memcpy(cat,dataCache,Rx_len2);
+	targetIndex = strstr(cat,"FECA ");
+	targetIndex2 = strstr(cat,"EBFF ");
+	if(targetIndex)//FECA
+	{
+		b1 = charhextoascii(targetIndex + 8);
+		if((b1&0x40) == 0)//故障灯不亮,没有故障码
+		{
+			sprintf(pri,"n=0");
+		}
+		else//故障灯亮,1个故障码
+		{
+			b3 = charhextoascii(targetIndex + 14);
+			b4 = charhextoascii(targetIndex + 17);
+			b5 = charhextoascii(targetIndex + 20);
+			b6 = charhextoascii(targetIndex + 23);
+			spn = ((b5&0xe0) << 11) + ((b4&0xff) <<8) + (b3&0xff);
+			fmi = (b5&0x1f);
+			oc = (b6&0x7f);		
+			sprintf(pri,"n=1\r\nspn=%d, fmi=%d, oc=%d",spn,fmi,oc);
+		}
+	}
+	//2个以上故障码
+	else if(targetIndex2)//EBFF
+	{
+		a = htoi(cat[0]);
+		b = htoi(cat[1]);
+		c = htoi(cat[2]);
+		n = (((a&0xf)<<8)+((b&0xf)<<4)+(c&0xf)-2) >> 2;//计算故障码数
+		
+		/*整理拼接字符串*/
+		cnt = strstrcount(cat,"EBFF ");
+		for(i=0;i<cnt;i++)
+		{
+			targetIndex = strstr(cat+i*30,"EBFF ");
+			strncat(tmp,targetIndex+11,20);
+			strcat(tmp," ");
+		}
+		strcpy(cat,tmp);
+		sprintf(pri,"n=%d",n);
+		for(i=0;i<n;i++)
+		{
+			b3 = charhextoascii(cat+6+i*12);
+			b4 = charhextoascii(cat+9+i*12);
+			b5 = charhextoascii(cat+12+i*12);
+			b6 = charhextoascii(cat+15+i*12);
+			spn = ((b5&0xe0) << 11) +((b4&0xff) <<8) + (b3&0xff);
+			fmi = (b5&0x1f);
+			oc = (b6&0x7f);
+			sprintf(tmp,"\r\nspn=%d, fmi=%d, oc=%d",spn,fmi,oc);
+			strcat(pri,tmp);
+		}
+	}
+
+//	printf("%s\r\n",pri);
+	n = strlen(pri);
+	memset(tmp,0,sizeof(tmp));
+
+	tmp[0] = 0x55;	//协议头
+	tmp[1] = 0xFA;	//协议头
+	tmp[2] = 0x06 + n;//长度:参数+指令码
+	tmp[3] = 0xD0;	//指令码
+	tmp[4] = 0x07;	//指令码
+	memcpy(tmp+5,pri,n);//故障码内容
+	tmp[5+n] = (TimeStamp >> 24);//时间戳
+	tmp[6+n] = (TimeStamp >> 16);
+	tmp[7+n] = (TimeStamp >> 8);
+	tmp[8+n] = TimeStamp;
+	tmp[9+n] = getCRC8(tmp+3, tmp[2]);	//CRC校验;
+	tmp[10+n] = 0xEE ;//协议尾
+	HAL_UART_Transmit(&huart3,tmp,tmp[2]+5,0xFFFF);//发送数据
+
+	SendFlag = 0;
+	pgn_Flag = 0;
+	return 1;	
+}
+
+int getHighResMiles(void)
 {
 	char cat[100] = "";
-	u8 data_len = 0, work = 0;
-	
-	memset(&Miles_T,0,sizeof(OBD_T));	
-	memset(&TotalMiles_T,0,sizeof(OBD_T));
-	
-	//设置模式
-	setBroadcastMode(1);
-	writeCmd("at st 4b\r");
-	HAL_Delay(20);	
-	//发送指令
-	//writeCmd("FEC1\r");//高精度
-	writeCmd("FEE0\r");
-	
-	//循环超时等待接收
-	while(work++ < request_cycle)
-	{
-		//收到数据
-		if(readCmd((u8*)cat,&data_len,310))
-		{
-			if(data_len<9)
-				continue;
-			else		
-				break;
-		}
-		//没有收到数据
-		else 
-			break;		
-	}
-	writeCmd("at st 32\r");
+	u64 sub0 = 0;
+	char *targetIndex = NULL;
 
-	u32 sub0 = 0,sub1 = 0;
-	
-	if(getSpaceNum(cat)>=7)//计算空格数量
+	memcpy(cat,dataCache,Rx_len2);
+	targetIndex = strstr(cat,"EC1 ");
+	if(targetIndex) 
 	{
-		u32 a = charhextoascii(cat);
-		u32 b = charhextoascii(cat+3);
-		u32 c = charhextoascii(cat+6);
-		u32 d = charhextoascii(cat+9);
-		u32 e = charhextoascii(cat+12);
-		u32 f = charhextoascii(cat+15);
-		u32 g = charhextoascii(cat+18);
-		u32 h = charhextoascii(cat+21);
-//		sub0 = (a +b*256 + c*65536 + d*16777216)/200;//总里程
-//		sub1 = (e +f*256 + g*65536 + h*16777216)/200;//短里程
-//		sub1 = (a +b*256 + c*65536 + d*16777216)/8;//短里程
-//		sub0 = (e +f*256 + g*65536 + h*16777216)/8;//总里程
-		sub1 = (a +(b<<8) + (c<<16) + (d<<24)) >> 3;//短里程
-		sub0 = (e +(f<<8) + (g<<16) + (h<<24)) >> 3;//总里程		
+		u32 a = charhextoascii(targetIndex + 7);
+		u32 b = charhextoascii(targetIndex + 10);
+		u32 c = charhextoascii(targetIndex + 13);
+		u32 d = charhextoascii(targetIndex + 16);
+		sub0 = (a +(b<<8) + (c<<16) + (d<<24)) * 5;//总里程	
 	}
 
-	if(sub1 && sub1<526385152)
+	if(sub0 && sub0<21055406000)
 	{
-		Miles_T.Data[0] = (sub1 >> 24);
-		Miles_T.Data[1] = (sub1 >> 16);
-		Miles_T.Data[2] = (sub1 >> 8);
-		Miles_T.Data[3] = sub1;
-	}
-	Miles_T.Data[4] = TimeStamp >> 24;
-	Miles_T.Data[5] = TimeStamp >> 16;
-	Miles_T.Data[6] = TimeStamp >> 8;
-	Miles_T.Data[7] = TimeStamp;
-	Miles_T.length = 8;
-	Miles_T.type = 0X05;
 	
-	if(sub0 && sub0<526385152)
-	{
-		TotalMiles_T.Data[0] = (sub0 >> 24);
-		TotalMiles_T.Data[1] = (sub0 >> 16);
-		TotalMiles_T.Data[2] = (sub0 >> 8);
-		TotalMiles_T.Data[3] = sub0;
+		HighResTotalMiles_T.Data[0] = (sub0 >> 32);
+		HighResTotalMiles_T.Data[1] = (sub0 >> 24);
+		HighResTotalMiles_T.Data[2] = (sub0 >> 16);
+		HighResTotalMiles_T.Data[3] = (sub0 >> 8);
+		HighResTotalMiles_T.Data[4] = sub0;
 	}
-	TotalMiles_T.Data[4] = TimeStamp >> 24;
-	TotalMiles_T.Data[5] = TimeStamp >> 16;
-	TotalMiles_T.Data[6] = TimeStamp >> 8;
-	TotalMiles_T.Data[7] = TimeStamp;
-	TotalMiles_T.length = 8;
-	TotalMiles_T.type = 0X06;
+	SendFlag = 1;
 	
-	OBD_TtoP(TotalMiles_T,TotalMiles_P);	
-	OBD_TtoP(Miles_T,Miles_P);
-
-	return sub1;
+	return sub0;
 }
+
+/*
+	清除故障码
 */
+int clearDTCs(void)
+{
+	writeCmd("FED3\r");
+	HAL_Delay(20);
+}
+
 /*自适应波特率*/
 int autoBaudRate(void)
 {
@@ -1083,14 +869,12 @@ int setBroadcastMode(bool mode1)
 {
 	u8 work = 0, data_len = 0;
 	char cat[48] = "";
-	char cmd[20] = "";
 
 	if(mode1)
-		sprintf(cmd, "at intrude 0\r");
+		writeCmd("at intrude 0\r");
 	else
-		sprintf(cmd, "at intrude 1\r");
+		writeCmd("at intrude 1\r");
 
-	writeCmd(cmd);
 //	HAL_Delay(20);
 	
 	while(work++ < request_cycle)
@@ -1177,8 +961,27 @@ int protHandler(u8* recvCmd,u8 len)
 			mcuReply(0x0004,0xff);		
 		}
 			break;
-		case 0X0005://设置读取数据类型
+		case 0x0005://设置工作模式
 		{
+			if(ProtRecvBuff[5]==0X00)//ELD模式
+			{
+				DFL168_Init();
+			}
+			else if(ProtRecvBuff[5]==0XFF)//命令模式
+			{
+				ELD_funStop();
+				CMD_Flag = 1;
+			}
+		}
+			break;
+		case 0x0006://命令模式请求
+		{
+			CMD_Pass(ProtRecvBuff);
+		}
+			break;
+		case 0x0007://清除故障码
+		{
+			clearDTCs();
 		}
 			break;
 		case 0X5001://请求进行OTA升级
@@ -1191,8 +994,8 @@ int protHandler(u8* recvCmd,u8 len)
 			versionReply();
 		}
 			break;
-		case 0X6002:
-		{//查询休眠延迟时间
+		case 0X6002://查询休眠延迟时间
+		{
 			mcuReply(0x6002,sleepDelay/60);
 		}
 			break;
@@ -1270,16 +1073,18 @@ int mcuReply(u16 cmdCode,u8 replyFlag)
 int versionReply(void)
 {
 	u8 ReplyBuff[32] = {0};
+	int length = strlen(MCU_Version);
+	
 	ReplyBuff[0] = 0X55;
 	ReplyBuff[1] = 0XFA;
-	ReplyBuff[2] = 0X02 + strlen(MCU_Version);
+	ReplyBuff[2] = 0X02 + length;
 	ReplyBuff[3] = 0x60;
 	ReplyBuff[4] = 0x01;
-	memcpy(ReplyBuff+5,MCU_Version,strlen(MCU_Version));	
-	ReplyBuff[5+strlen(MCU_Version)] = getCRC8(ReplyBuff+3,ReplyBuff[2]);
-	ReplyBuff[6+strlen(MCU_Version)] = 0XEE;
+	memcpy(ReplyBuff+5,MCU_Version,length);	
+	ReplyBuff[5+length] = getCRC8(ReplyBuff+3,ReplyBuff[2]);
+	ReplyBuff[6+length] = 0XEE;
 	
-	HAL_UART_Transmit(&huart3,ReplyBuff,strlen(MCU_Version)+7,0xffff);
+	HAL_UART_Transmit(&huart3,ReplyBuff,length+7,0xffff);
 	return 1;
 }
 
@@ -1310,7 +1115,7 @@ int backup_Handler(u8 i)
 	backup_buf[i][1] = 0xFA;
 	
 	//长度
-	backup_buf[i][2] = 0x15;
+	backup_buf[i][2] = 0x1A;
 	
 	//指令码
 	backup_buf[i][3] = 0xB0;
@@ -1337,48 +1142,24 @@ int backup_Handler(u8 i)
 	backup_buf[i][17] = TotalMiles_T.Data[1];
 	backup_buf[i][18] = TotalMiles_T.Data[2];
 	backup_buf[i][19] = TotalMiles_T.Data[3];
+	/*高精度总里程*/
+	backup_buf[i][20] = HighResTotalMiles_T.Data[0];
+	backup_buf[i][21] = HighResTotalMiles_T.Data[1];
+	backup_buf[i][22] = HighResTotalMiles_T.Data[2];
+	backup_buf[i][23] = HighResTotalMiles_T.Data[3];
+	backup_buf[i][24] = HighResTotalMiles_T.Data[4];
 	/*时间戳*/
-	backup_buf[i][20]  = (TimeStamp >> 24);
-	backup_buf[i][21]  = (TimeStamp >> 16);
-	backup_buf[i][22] = (TimeStamp >> 8);
-	backup_buf[i][23] = TimeStamp;
+	backup_buf[i][25]  = (TimeStamp >> 24);
+	backup_buf[i][26]  = (TimeStamp >> 16);
+	backup_buf[i][27] = (TimeStamp >> 8);
+	backup_buf[i][28] = TimeStamp;
 	
 	//校验码
-	backup_buf[i][24] = getCRC8(backup_buf[i]+3,backup_buf[i][2]);;
+	backup_buf[i][29] = getCRC8(backup_buf[i]+3,backup_buf[i][2]);;
 	
 	//帧尾
-	backup_buf[i][25] = 0xEE;
-/*	
-	//数据头
-	backup_buf[i][0] = 0xB0;
-	//发动机时间
-	backup_buf[i][1] = EngineHours_T.Data[0];
-	backup_buf[i][2] = EngineHours_T.Data[1];
-	backup_buf[i][3] = EngineHours_T.Data[2];
-	backup_buf[i][4] = EngineHours_T.Data[3];
-	//车速
-	backup_buf[i][5] = Vss_T.Data[0];
-	//转速
-	backup_buf[i][6] = Rpm_T.Data[0];
-	backup_buf[i][7] = Rpm_T.Data[1];
-	//短里程
-	backup_buf[i][8] = Miles_T.Data[0];
-	backup_buf[i][9] = Miles_T.Data[1];
-	backup_buf[i][10] = Miles_T.Data[2];
-	backup_buf[i][11] = Miles_T.Data[3];
-	//总里程
-	backup_buf[i][12] = TotalMiles_T.Data[0];
-	backup_buf[i][13] = TotalMiles_T.Data[1];
-	backup_buf[i][14] = TotalMiles_T.Data[2];
-	backup_buf[i][15] = TotalMiles_T.Data[3];
-	//时间戳
-	backup_buf[i][16]  = (TimeStamp >> 24);
-	backup_buf[i][17]  = (TimeStamp >> 16);
-	backup_buf[i][18] = (TimeStamp >> 8);
-	backup_buf[i][19] = TimeStamp;
-	
-	backup_buf[i][20] = getCRC8(backup_buf[i],20);
-*/	
+	backup_buf[i][30] = 0xEE;
+
 	if(i==3) //每隔4秒存储一次数据
 	{
 		StoreFlag = 1;
@@ -1556,31 +1337,42 @@ void sync_Handler(void)
 void sync_SendData(u8 mbuf[][32])
 {
 	
-	u8 tmpbuf[30] = {0};
+	u8 tmpbuf[32] = {0};
 	int i = 0;
-/*
-	tmpbuf[0] = 0X55;
-	tmpbuf[1] = 0XFA;		//协议头
-	tmpbuf[2] = 0X15;		//长度21字节
-	tmpbuf[3] = 0XB0;		//指令码
-	tmpbuf[4] = 0x00;		//历史数据
-	tmpbuf[25] = 0xEE;	//协议尾	
 
 	for(i=0;i<4;i++)
 	{				
-		memcpy(tmpbuf+5,mbuf[i]+1,19);	//备份数据
-
-		tmpbuf[24] = getCRC8(tmpbuf+3,tmpbuf[2]);//检验码
-
-		HAL_UART_Transmit(&huart3,tmpbuf,26,0xFFFF);
-		HAL_Delay(10);
-	}
-*/
-	for(i=0;i<4;i++)
-	{				
-		memcpy(tmpbuf,mbuf[i],26);	//拷贝历史数据
-		HAL_UART_Transmit(&huart3,tmpbuf,26,0xFFFF);
+		memcpy(tmpbuf,mbuf[i],31);	//拷贝历史数据
+		HAL_UART_Transmit(&huart3,tmpbuf,31,0xFFFF);
 		HAL_Delay(1);
 	}
 }
+
+void CMD_Handler(void)
+{
+	u8 tmp[256]="";
+	//收到168芯片应答
+	if(recv_end_flag2)
+	{
+		tmp[0] = 0x55;	//协议头
+		tmp[1] = 0xFA;	//协议头
+		tmp[2] = 0x02 + Rx_len2;//长度:参数+指令码
+		tmp[3] = 0x00;	//指令码
+		tmp[4] = 0x06;	//指令码
+		memcpy(tmp+5,dataCache,Rx_len2);//故障码内容
+		tmp[5+Rx_len2] = getCRC8(tmp+3, tmp[2]);	//CRC校验;
+		tmp[6+Rx_len2] = 0xEE ;//协议尾
+		HAL_UART_Transmit(&huart3,tmp,tmp[2]+5,0xFFFF);//发送数据
+		recv_end_flag2 = 0;
+	}
+}
+
+void CMD_Pass(u8 *buf)
+{
+	u8 tmp[128] ="";
+	memcpy(tmp,buf+5,buf[2]-2);
+	HAL_UART_Transmit(&huart2 , (u8*)tmp, buf[2]-2, 0xFFFF);
+}
+
+
 
