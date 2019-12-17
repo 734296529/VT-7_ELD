@@ -59,10 +59,10 @@
 #define BT_INT_EXTI_IRQn EXTI2_IRQn
 #define LED_ON_Pin GPIO_PIN_3
 #define LED_ON_GPIO_Port GPIOC
-#define Wake_BT_Pin GPIO_PIN_1
-#define Wake_BT_GPIO_Port GPIOA
 #define SPI1_CS_Pin GPIO_PIN_4
 #define SPI1_CS_GPIO_Port GPIOA
+#define ACC_Pin GPIO_PIN_12
+#define ACC_GPIO_Port GPIOB
 #define SLEEP_Pin GPIO_PIN_6
 #define SLEEP_GPIO_Port GPIOB
 

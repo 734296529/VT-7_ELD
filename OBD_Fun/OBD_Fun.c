@@ -11,6 +11,7 @@
 #define request_cycle 3
 
 volatile bool Vin_ed = 0; //Vin码是否已获取
+volatile bool EngineHours_ed = 0; //引擎时间是否已获取
 
 //缓存数据
 u32 TimeStamp = 0;
@@ -66,9 +67,20 @@ void ELD_funStop(void)
 
 void J1939_Handler(void)
 {
+
 	//准备发送请求
 	if(pgn_Flag == 0)
 	{
+		if(getDTCsFlag)
+		{
+			getDTCs();
+			getDTCsFlag = 0;
+		}
+		else if(clearDTCsFlag)
+		{
+			clearDTCs();
+			clearDTCsFlag = 0;
+		}
 		sendPGN();
 	}
 	//pgn_Flag!=0超时没有收到应答
@@ -98,7 +110,7 @@ void sendPGN(void)
 	static u8 i = 0;
 	u32 tmp = 0;
 
-	if(i>6)
+	if(i>5)
 		i = 0;
 
 	switch(i)
@@ -191,13 +203,13 @@ void sendPGN(void)
 			//设置非广播模式
 			setBroadcastMode(0);
 			//设置超时时间300ms
-			writeCmd("at st 4b\r");
+			writeCmd("at st ff\r");
 			//发送请求
 			memset(&EngineHours_T,0,sizeof(OBD_T));	
 			recv_end_flag2 = 0;
 			writeCmd("FEE5\r");
 			delayStart = HAL_GetTick();
-			delayCounter = 310;
+			delayCounter = 10010;
 			pgn_Flag = 0xfee5;
 			i++;
 		}
@@ -219,7 +231,7 @@ void sendPGN(void)
 			i++;
 		}		
 			break;
-		case 6://DTCs故障码
+/*		case 6://DTCs故障码
 		{
 			//设置广播模式
 			setBroadcastMode(1);
@@ -234,7 +246,7 @@ void sendPGN(void)
 			i++;
 		}
 			break;
-			
+*/
 		default:
 			i = 0;
 			break;
@@ -276,11 +288,6 @@ void recvPGN(void)
 		//VIN车架号
 		case 0xfeec:
 			getVin();
-			break;
-	
-		//故障码
-		case 0xfeca:
-			getDTCs();
 			break;
 
 		//高精度里程数
@@ -490,10 +497,16 @@ int getVin(void)
 	}
 	vin[17] = '\0'; 
 
-	if(vin[0]!=vin[1] || vin[0]!=vin[2] || vin[0]!=vin[3] || vin[0]!=vin[4])
+	for(i=0;i<17;i++)
 	{
-		Vin_ed = 1;
+		if(vin[i]!=0x0)
+		{
+			Vin_ed = 1;
+			break;
+		}
+
 	}
+
 	SendFlag = 1;
 	
 	return 1;
@@ -581,7 +594,7 @@ int getEngineHours(void)
 		u32 b = charhextoascii(targetIndex + 10);
 		u32 c = charhextoascii(targetIndex + 13);
 		u32 d = charhextoascii(targetIndex + 16);
-		sub = (a +(b<<8) + (c<<16) + (d<<24)) / 20;//引擎时间
+		sub = (a +(b<<8) + (c<<16) + (d<<24));//引擎时间
 	}
 	
 	if(sub && sub<210554061)
@@ -590,6 +603,7 @@ int getEngineHours(void)
 		EngineHours_T.Data[1] = (sub >> 16);
 		EngineHours_T.Data[2] = (sub >> 8);
 		EngineHours_T.Data[3] = sub;
+		EngineHours_ed = 1;
 	}
 	SendFlag = 1;
 
@@ -650,20 +664,28 @@ int getDTCs(void)
 	char cat[256] = "";
 	char tmp[256] = "";
 	int i = 0;
-	char pri[128] = "n=0";
+	char pri[256] = "n=0";
 	int cnt = 0;
 	int spn = 0;
 	int fmi = 0;
 	int oc = 0;
 	int n = 0;
+	u8 len = 0;
 	u8 a=0,b=0,c=0;
 	u8 b1=0, b3=0, b4=0, b5=0, b6=0;
 		
 	char *targetIndex = NULL;
 	char *targetIndex2 = NULL;
-	
-	pgn_Flag = 0x0;
-	memcpy(cat,dataCache,Rx_len2);
+
+	//设置广播模式
+	setBroadcastMode(1);
+	//设置超时时间1s
+	writeCmd("at st fa\r");
+	//发送请求
+	writeCmd("FECA\r");
+	HAL_Delay(20);
+	recv_end_flag2 = 0;	
+	readCmd((u8*)cat,&len,1020);
 	targetIndex = strstr(cat,"FECA ");
 	targetIndex2 = strstr(cat,"EBFF ");
 	if(targetIndex)//FECA
@@ -733,10 +755,8 @@ int getDTCs(void)
 	tmp[8+n] = TimeStamp;
 	tmp[9+n] = getCRC8(tmp+3, tmp[2]);	//CRC校验;
 	tmp[10+n] = 0xEE ;//协议尾
-	HAL_UART_Transmit(&huart3,tmp,tmp[2]+5,0xFFFF);//发送数据
+	HAL_UART_Transmit(&huart3,(u8*)tmp,tmp[2]+5,0xFFFF);//发送数据
 
-	SendFlag = 0;
-	pgn_Flag = 0;
 	return 1;	
 }
 
@@ -776,8 +796,10 @@ int getHighResMiles(void)
 */
 int clearDTCs(void)
 {
+	writeCmd("AT INTRUDE 1\r");
+	//HAL_Delay(20);
 	writeCmd("FED3\r");
-	HAL_Delay(20);
+	return 1;
 }
 
 /*自适应波特率*/
@@ -981,7 +1003,7 @@ int protHandler(u8* recvCmd,u8 len)
 			break;
 		case 0x0007://清除故障码
 		{
-			clearDTCs();
+			clearDTCsFlag = 1;
 		}
 			break;
 		case 0X5001://请求进行OTA升级
@@ -999,6 +1021,19 @@ int protHandler(u8* recvCmd,u8 len)
 			mcuReply(0x6002,sleepDelay/60);
 		}
 			break;
+		case 0X6004://查询工作模式
+		{
+			if(ELD_Rdy)
+			{
+				mcuReply(0x6004,0x00);				
+			}
+			else if(CMD_Flag)
+			{
+				mcuReply(0x6004,0xff);
+			}
+
+		}
+			break;
 		case 0X7001://上位机应答
 		{
 			if(ProtRecvBuff[5]==0XFF)
@@ -1007,7 +1042,11 @@ int protHandler(u8* recvCmd,u8 len)
 				recv_OK = 0;
 		}
 			break;
-		
+		case 0XD007://查询故障码
+		{
+			getDTCsFlag = 1;
+		}
+			break;
 		default:
 			break;
 	}
@@ -1373,6 +1412,4 @@ void CMD_Pass(u8 *buf)
 	memcpy(tmp,buf+5,buf[2]-2);
 	HAL_UART_Transmit(&huart2 , (u8*)tmp, buf[2]-2, 0xFFFF);
 }
-
-
 

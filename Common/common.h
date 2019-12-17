@@ -15,7 +15,7 @@ typedef volatile unsigned short int vu16;
 typedef volatile unsigned int vu32;
 typedef volatile unsigned long long vu64;
 
-#define MCU_Version	"V1.0.7-J"//单片机版本号
+#define MCU_Version	"V1.2.0-J"//单片机版本号
 /* 串口可接收最大字符个数 */
 #define UARTSIZE 		255
 #define PAGE_SIZE		0x100
@@ -51,6 +51,8 @@ extern volatile u8 StoreFlag;	 			//数据写入标志位
 extern volatile u8 SendFlag;				//发送数据标志位
 extern volatile u8 ELD_Rdy;					//初始化完成标志 
 extern volatile u8 CMD_Flag;				//命令行标志位
+extern volatile u8 getDTCsFlag;				//获取障码标志位
+extern volatile u8 clearDTCsFlag;			//清故障码标志位
 extern volatile u8 recv_OK;					//上位机应答标志
 extern u8 ProtRecvBuff[150];				//上位机指令缓存
 extern volatile u8 ProtRecvLen;	  	//上位机指令长度

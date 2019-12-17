@@ -30,6 +30,8 @@ volatile u8 StoreFlag = 0;				//数据写入标志位
 volatile u8 SendFlag = 0;					//发送数据标志位
 volatile u8 ELD_Rdy = 0;					//初始化完成标志
 volatile u8 CMD_Flag = 0;					//命令行标志位
+volatile u8 getDTCsFlag = 0;				//获取障码标志位
+volatile u8 clearDTCsFlag = 0;				//清故障码标志位
 volatile u8 recv_OK = 0;					//上位机应答标志
 u8 ProtRecvBuff[150]={0};					//上位机指令缓存
 volatile u8 ProtRecvLen = 0;			//上位机指令长度
@@ -98,7 +100,7 @@ int getSpaceNum(char *str)
 //判断字符的合法性
 int checkASCIIRange(char s)
 {
-	if ((s>='0' && s<='9') || (s>='A' && s<='Z') || (s>='a' && s<='z'))
+	if ((s>='0' && s<='9') || (s>='A' && s<='Z') || (s>='a' && s<='z') || (s==' '))
 		return 1;
 	else
 		return 0;
